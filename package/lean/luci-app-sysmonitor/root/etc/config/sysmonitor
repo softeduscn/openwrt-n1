@@ -103,7 +103,7 @@ config prog_list
 
 config prog_list
 	option program 'cron_chkvpn'
-	option cycle '30'
+	option cycle '60'
 	option path '/usr/share/sysmonitor/sysapp.sh'
 	option first '100'
 	option name '检测VPN'

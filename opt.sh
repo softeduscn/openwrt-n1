@@ -12,8 +12,8 @@ mkdir opt
 git clone https://github.com/unifreq/openwrt_packit opt/openwrt_packit
 kpath='https://github.com/breakings/OpenWrt/releases/download/kernel_stable/'
 kout='opt/openwrt_packit'
-kversion='6.1.92'
-krelease='90+o'
+kversion='6.6.33'
+krelease='90+'
 wget  --no-check-certificate -c -q $kpath$kversion'.tar.gz' -O $kout'/'$kversion'.tar.gz'
 tar -xvf $kout'/'$kversion'.tar.gz' -C $kout
 mv $kout'/'$kversion $kout'/kernel'
