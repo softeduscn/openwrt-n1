@@ -6,8 +6,7 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=LuCI support for luci-app-sysmonitor
-#LUCI_DEPENDS:=+kmod-tcp-bbr +qrencode
-LUCI_DEPENDS:=+ttyd +kmod-tcp-bbr +qrencode +bind-dig
+LUCI_DEPENDS:=+ttyd +kmod-tcp-bbr +qrencode +bind-dig +hysteria +brook +naiveproxy +pdnsd-alt +ssocks +trojan +trojan-go +v2raya +v2ray-core +xray-plugin
 LUCI_PKGARCH:=all
 PKG_VERSION:=1.0
 PKG_RELEASE:=1
