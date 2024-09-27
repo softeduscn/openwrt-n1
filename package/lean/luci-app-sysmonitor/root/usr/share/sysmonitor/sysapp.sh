@@ -78,6 +78,7 @@ firstrun(){
 	sed -i '/^$/d' /tmp/nodeinfo
 	sysdir='/etc/sysmonitor'
 	mv $sysdir/fs.lua /usr/lib/lua/luci
+	mv $sysdir/mosdns /tmp
 	destdir=''
 	mvdir $sysdir $destdir
 	echo "60=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
@@ -86,8 +87,10 @@ firstrun(){
 	uci del network.utun
 	uci commit network
 	/etc/init.d/network restart &
+	[ -d /tmp/mosdns ] && rm -rf /tmp/mosdns
 	touch /tmp/makehost.sign
 	touch /tmp/firstrun
+	setdns
 	sed -i 's_downloads.openwrt.org_mirrors.cloud.tencent.com/openwrt_' /etc/opkg/distfeeds.conf
 	[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
 }
@@ -316,18 +319,21 @@ getvpn() {
 		#status=$(test_url "https://www.google.com/generate_204")
 		status=$(ping_url www.google.com)
 		[ "$status" != 0 ] && status=1
-		if [ "$status" != 0 ]; then
-			case $vpn in
-				Passwall)
-					node=$(uci get passwall.@global[0].tcp_node)
-					status=$($APP_PATH/test.sh url_test_node $node)
-					if [ "${status:0:1}" != 0 ]; then
-						status='1'
-					else
-						status=0
-					fi
-					;;
-			esac
+		chkvpn=$(uci_get_by_name $NAME $NAME chkvpn 0)
+		if [ "$chkvpn" == 1 ]; then
+			if [ "$status" != 0 ]; then
+				case $vpn in
+					Passwall)
+						node=$(uci get passwall.@global[0].tcp_node)
+						status=$($APP_PATH/test.sh url_test_node $node)
+						if [ "${status:0:1}" != 0 ]; then
+							status='1'
+						else
+							status=0
+						fi
+						;;
+				esac
+			fi
 		fi
 	fi
 	if [ "$status" == 0 ]; then
@@ -377,7 +383,7 @@ smartdns_cache() {
 }
 
 start_smartdns() {
-	uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME smartdnsPORT '6053')
+	uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME dnsPORT '53')
 	uci set smartdns.@smartdns[0].enabled='1'
 	if [ -n "$1" ]; then
 		uci set smartdns.@smartdns[0].seconddns_enabled='1'
@@ -398,6 +404,9 @@ setdns() {
 			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
 			uci set mosdns.config.redirect=1
 			uci set mosdns.config.enabled=1
+			uci set dhcp.@dnsmasq[0].port=0
+			uci commit dhcp
+			/etc/init.d/odhcpd restart
 			uci commit mosdns
 			reload "mosdns"
 			;;
@@ -482,7 +491,7 @@ setdns() {
 		Shadowsocksr)
 			if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
 				uci set sysmonitor.sysmonitor.dns="SmartDNS"
-				uci set sysmonitor.sysmonitor.smartdnsPORT='6053'
+				#uci set sysmonitor.sysmonitor.dnsPORT='53'
 				uci commit sysmonitor
 				uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
 				start_smartdns '5335'
@@ -493,7 +502,7 @@ setdns() {
 			;;
 		Passwall)
 			uci set sysmonitor.sysmonitor.dns="SmartDNS"
-			uci set sysmonitor.sysmonitor.smartdnsPORT='6053'
+			uci set sysmonitor.sysmonitor.dnsPORT='53'
 			uci commit sysmonitor
 			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
 			port='8653'
@@ -618,7 +627,7 @@ selvpn() {
 shadowsocksr() {
 	if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
 		uci set sysmonitor.sysmonitor.dns="SmartDNS"
-		uci set sysmonitor.sysmonitor.smartdnsPORT='6053'
+		#uci set sysmonitor.sysmonitor.dnsPORT='53'
 	fi
 	uci set sysmonitor.sysmonitor.vpn="Shadowsocksr"
 	uci commit sysmonitor

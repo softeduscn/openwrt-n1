@@ -49,6 +49,9 @@ end
 
 s.anonymous = true
 
+o = s:option(Flag, "chkvpn", translate("VPN Connection by URL"))
+o.rmempty = false
+
 o = s:option(Value, "systime", translate("Check system time(s)"))
 o.rmempty = false
 

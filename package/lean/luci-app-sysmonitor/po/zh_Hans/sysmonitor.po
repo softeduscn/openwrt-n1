@@ -230,3 +230,6 @@ msgstr "程序名"
 
 msgid "Path + Main"
 msgstr "路径+主程序"
+
+msgid "VPN Connection by URL"
+msgstr "由URL检测VPN连接"
