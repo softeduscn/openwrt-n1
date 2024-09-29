@@ -8,7 +8,7 @@ config sysmonitor 'sysmonitor'
 	option gateway '192.168.1.1'
 	option vpn 'Passwall'
 	option dns 'MosDNS'
-	option dns 'MosDNS'
+	option port '53'
 	option systime '10'
 	option chkvpn '0'
 	option chkprog '63'
@@ -118,3 +118,16 @@ config prog_list
 	option first '180'
 	option name '检测dns'
 
+config prog_list
+	option program 'smartdns_update'
+	option cycle '300'
+	option path '/usr/share/sysmonitor/sysapp.sh'
+	option first '90'
+	option name '更新SmartDNS数据'
+	
+config prog_list
+	option program 'mosdns_update'
+	option cycle '300'
+	option path '/usr/share/sysmonitor/sysapp.sh'
+	option first '180'
+	option name '更新MosDNS数据'

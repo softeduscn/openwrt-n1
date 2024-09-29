@@ -91,6 +91,12 @@ msgstr "NAS配置"
 msgid "WGusers"
 msgstr "WG用户"
 
+msgid "Enable URL check VPN"
+msgstr "启用URL检测VPN"
+
+msgid "Disable URL check VPN"
+msgstr "禁止URL检测VPN"
+
 msgid "Enable switch VPN"
 msgstr "启用VPN切换"
 

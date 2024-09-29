@@ -128,8 +128,8 @@ plugins:
   - tag: main_sequence
     type: sequence
     args:
-      - exec: $localhosts
       - exec: $lazy_cache
+      - exec: $localhosts
       - exec: $query_is_local_domain
       - exec: jump has_resp_sequence
       - exec: $query_is_no_local_domain

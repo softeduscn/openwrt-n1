@@ -59,6 +59,12 @@ set_static() {
 }
 
 firstrun(){
+	sed -i '/start_mosdns_update/d' /etc/crontabs/root
+	sed -i '/start_smartdns_update/d' /etc/crontabs/root
+	echo "0 2 */3 * * /usr/share/sysmonitor/sysapp.sh start_mosdns_update" >> /etc/crontabs/root
+	echo "0 2 */3 * * /usr/share/sysmonitor/sysapp.sh start_smartdns_update" >> /etc/crontabs/root
+	echo '0' >/tmp/mosdns_update
+	echo '0' >/tmp/smartdns_update
 	if [ "$(cat /etc/shadow|grep root:::|wc -l)" != 0 ]; then
 		utc_secs=$(date +%s)
 		days=$(( utc_secs / 86400 ))
@@ -78,21 +84,20 @@ firstrun(){
 	sed -i '/^$/d' /tmp/nodeinfo
 	sysdir='/etc/sysmonitor'
 	mv $sysdir/fs.lua /usr/lib/lua/luci
-	mv $sysdir/mosdns /tmp
 	destdir=''
 	mvdir $sysdir $destdir
+	setdns
 	echo "60=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
 	echo 0 > /tmp/vpn_status
 	getip
 	uci del network.utun
 	uci commit network
 	/etc/init.d/network restart &
-	[ -d /tmp/mosdns ] && rm -rf /tmp/mosdns
 	touch /tmp/makehost.sign
 	touch /tmp/firstrun
-	setdns
 	sed -i 's_downloads.openwrt.org_mirrors.cloud.tencent.com/openwrt_' /etc/opkg/distfeeds.conf
 	[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
+	crontab /etc/crontabs/root
 }
 
 mvdir() {
@@ -112,22 +117,6 @@ else
 fi
 done
 chmod 0755 /etc/ipset-rules/*.sh  
-}
-
-agh() {
-file1="/etc/AdGuardHome.yaml"
-if [ -f $file1 ]; then
-	status='Stopped'
-	#[ "$(ps -w|grep -v grep|grep AdGuardHome|wc -l)" -gt 0 ] && status='Running'
-	[ -n "$(pgrep -f AdGuardHome)" ] && status='Running'
-	num1=$(sed -n '/upstream_dns:/=' $file1)
-	let num1=num1+1
-	tmp='sed -n '$num1'p '$file1
-	adguardhome=$($tmp)
-	echo $status$adguardhome
-else
-	echo ""
-fi
 }
 
 ipsec_users() {
@@ -237,29 +226,6 @@ wg() {
 	echo $wg
 }
 
-ad_del() {
-	file1="/etc/AdGuardHome.yaml"
-	num1=$(sed -n '/upstream_dns:/=' $file1)
-	num2=$(sed -n '/upstream_dns_file:/=' $file1)
-	let num1=num1+1
-	let num2=num2-1
-	tmp='sed -i '$num1','$num2'd '$file1
-	[ $num1 -le $num2 ] && $tmp
-}
-
-ad_switch() {
-	[ ! -f "/etc/init.d/AdGuardHome" ] && return
-	adguardhome="  - "$1
-	file1="/etc/AdGuardHome.yaml"
-	if [ -f $file1 ]; then
-		ad_del "upstream_dns:" "upstream_dns_file:"
-		sed -i '/upstream_dns:/asqmshcn' $file1
-		sed -i "s|sqmshcn|$adguardhome|g" $file1
-		[ "$(uci_get_by_name AdGuardHome AdGuardHome enabled 0)" == 1 ] && /etc/init.d/AdGuardHome force_reload >/dev/null
-	fi
-}
-
-
 switch_ipsecfw() {
 	if [ "$(uci get firewall.@zone[0].masq)" == 1 ]; then
 		uci set firewall.@zone[0].mtu_fix=0
@@ -269,7 +235,7 @@ switch_ipsecfw() {
 		uci set firewall.@zone[0].masq=1
 	fi
 	uci commit firewall
-	/etc/init.d/firewall restart 2>/dev/null
+	/etc/init.d/firewall restart >/dev/null 2>&1
 }
 
 getgateway() {
@@ -316,23 +282,25 @@ getvpn() {
 	if [ "$vpn" == 'NULL' ]; then
 		status='0'
 	else	
-		#status=$(test_url "https://www.google.com/generate_204")
 		status=$(ping_url www.google.com)
-		[ "$status" != 0 ] && status=1
-		chkvpn=$(uci_get_by_name $NAME $NAME chkvpn 0)
-		if [ "$chkvpn" == 1 ]; then
-			if [ "$status" != 0 ]; then
-				case $vpn in
-					Passwall)
-						node=$(uci get passwall.@global[0].tcp_node)
-						status=$($APP_PATH/test.sh url_test_node $node)
-						if [ "${status:0:1}" != 0 ]; then
-							status='1'
-						else
-							status=0
-						fi
-						;;
-				esac
+		if [ "$status" != 0 ]; then
+			status=$(test_url "https://www.google.com/generate_204")
+			[ "$status" != 0 ] && status=1
+			chkvpn=$(uci_get_by_name $NAME $NAME chkvpn 0)
+			if [ "$chkvpn" == 1 ]; then
+				if [ "$status" != 0 ]; then
+					case $vpn in
+						Passwall)
+							node=$(uci get passwall.@global[0].tcp_node)
+							status=$($APP_PATH/test.sh url_test_node $node)
+							if [ "${status:0:1}" != 0 ]; then
+								status='1'
+							else
+								status=0
+							fi
+							;;
+					esac
+				fi
 			fi
 		fi
 	fi
@@ -383,7 +351,7 @@ smartdns_cache() {
 }
 
 start_smartdns() {
-	uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME dnsPORT '53')
+	uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME port '53')
 	uci set smartdns.@smartdns[0].enabled='1'
 	if [ -n "$1" ]; then
 		uci set smartdns.@smartdns[0].seconddns_enabled='1'
@@ -404,10 +372,11 @@ setdns() {
 			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
 			uci set mosdns.config.redirect=1
 			uci set mosdns.config.enabled=1
+			uci commit mosdns
 			uci set dhcp.@dnsmasq[0].port=0
 			uci commit dhcp
-			/etc/init.d/odhcpd restart
-			uci commit mosdns
+			/etc/init.d/odhcpd reload
+			/etc/init.d/dnsmasq reload
 			reload "mosdns"
 			;;
 		SmartDNS)
@@ -491,7 +460,7 @@ setdns() {
 		Shadowsocksr)
 			if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
 				uci set sysmonitor.sysmonitor.dns="SmartDNS"
-				#uci set sysmonitor.sysmonitor.dnsPORT='53'
+				#uci set sysmonitor.sysmonitor.port='53'
 				uci commit sysmonitor
 				uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
 				start_smartdns '5335'
@@ -502,7 +471,7 @@ setdns() {
 			;;
 		Passwall)
 			uci set sysmonitor.sysmonitor.dns="SmartDNS"
-			uci set sysmonitor.sysmonitor.dnsPORT='53'
+			uci set sysmonitor.sysmonitor.port='53'
 			uci commit sysmonitor
 			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
 			port='8653'
@@ -627,7 +596,7 @@ selvpn() {
 shadowsocksr() {
 	if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
 		uci set sysmonitor.sysmonitor.dns="SmartDNS"
-		#uci set sysmonitor.sysmonitor.dnsPORT='53'
+		#uci set sysmonitor.sysmonitor.port='53'
 	fi
 	uci set sysmonitor.sysmonitor.vpn="Shadowsocksr"
 	uci commit sysmonitor
@@ -1264,32 +1233,34 @@ sysbutton() {
 		vpn=$(uci_get_by_name $NAME $NAME vpn 'NULL')
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ -f /etc/init.d/smartdns ]; then
+			dnsname='SmartDNS'
+			[ "$(cat /tmp/smartdns_update)" == 0 ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'SmartDNS' ]; then
-				#if [ "$(ps |grep smartdns|grep -v grep|wc -l)" == 0 ]; then
 				if [ ! -n "$(pgrep -f smartdns)" ]; then
-					button=' <button class=button2 title="SmartDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">SmartDNS</a></button>'
+					button=' <button class=button2 title="SmartDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
 					group2=$group2$button
 				else
-					button=' <button class=button1 title="Goto smartdns setting"><a href="/cgi-bin/luci/admin/services/smartdns" target="blank">SmartDNS</a></button>'
+					button=' <button class=button1 title="Goto smartdns setting"><a href="/cgi-bin/luci/admin/services/smartdns" target="blank">'$dnsname'</a></button>'
 					group1=$group1$button
 				fi
 			else
-				button=' <button class=button3 title="Start smartdns"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">SmartDNS</a></button>'
+				button=' <button class=button3 title="Start smartdns"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
 				group3=$group3$button
 			fi
 		fi
 		if [ -f /etc/init.d/mosdns ]; then
+			dnsname='MosDNS'
+			[ "$(cat /tmp/mosdns_update)" == 0 ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'MosDNS' ]; then
-				#if [ "$(ps |grep mosdns|grep -v grep|wc -l)" == 0 ]; then
 				if [ ! -n "$(pgrep -f mosdns)" ]; then
-					button=' <button class=button2 title="MosDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">MosDNS</a></button>'
+					button=' <button class=button2 title="MosDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
 					group2=$group2$button
 				else
-					button=' <button class=button1 title="Goto MosDNS setting"><a href="/cgi-bin/luci/admin/services/mosdns" target="blank">MosDNS</a></button>'
+					button=' <button class=button1 title="Goto MosDNS setting"><a href="/cgi-bin/luci/admin/services/mosdns" target="blank">'$dnsname'</a></button>'
 					group1=$group1$button
 				fi
 			else
-				button=' <button class=button3 title="Start MosDNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">MosDNS</a></button>'
+				button=' <button class=button3 title="Start MosDNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
 				group3=$group3$button
 			fi
 		fi
@@ -1347,6 +1318,15 @@ sysmenu() {
 			uci_set_by_name $NAME $NAME nextvpn 0
 		else
 			uci_set_by_name $NAME $NAME nextvpn 1
+		fi
+		uci commit sysmonitor
+		;;
+	URLchkVPN)
+		chkvpn=$(uci_get_by_name $NAME $NAME chkvpn)
+		if [ "$chkvpn" == 1 ]; then
+			uci_set_by_name $NAME $NAME chkvpn 0
+		else
+			uci_set_by_name $NAME $NAME chkvpn 1
 		fi
 		uci commit sysmonitor
 		;;
@@ -1441,6 +1421,28 @@ chkapp() {
 	[ "$(pgrep -f netconn.sh|wc -l)" -gt 1 ] && killall netconn.sh
 }
 
+mosdns_update() {
+	if [ "$(cat /tmp/mosdns_update)" == 0 ]; then
+		/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1
+		[ "$?" == 0 ] && echo 1 > /tmp/mosdns_update
+	fi
+}
+
+smartdns_update() {
+	if [ "$(cat /tmp/smartdns_update)" == 0 ]; then
+		tmpdir=$(mktemp -d) || exit 1
+		/usr/share/sysmonitor/gfwlist2dnsmasq.sh -l -o $tmpdir/gfwlist > /dev/null 2>&1
+		if [ $? == 0 ]; then
+			cp $tmpdir/gfwlist /etc/smartdns/domain-set
+			echo 1 > /tmp/smartdns_update
+			dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
+			[ "$dns" == 'SmartDNS' ] && reload smartdns
+			continue
+		fi
+		rm -rf $tmpdir
+	fi
+}
+
 #[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
 arg1=$1
 shift
@@ -1469,28 +1471,28 @@ makehost)
 	makehost
 	;;
 cron_dns)
-	delay_prog cron_dns
 	status=$(ping_url www.baidu.com.cn)
 	if [ $status == 0 ] ; then
 		dns=$(echo $(uci_get_by_name $NAME $NAME dns)|tr A-Z a-z)
 		/etc/init.d/$dns restart
 	fi
+	delay_prog cron_dns
 	;;
 cron_regvpn)
-	delay_prog cron_regvpn
 	regvpn
+	delay_prog cron_regvpn
 	;;
 cron_chkvpn)
-	delay_prog cron_chkvpn
 	getvpn
+	delay_prog cron_chkvpn
 	;;
 update_ddns)
-	delay_prog update_ddns
 	update_ddns
+	delay_prog update_ddns
 	;;
 checknode)
-	delay_prog checknode
 	checknode
+	delay_prog checknode
 	;;
 proto)
 	proto $1
@@ -1577,9 +1579,6 @@ firstrun)
 switch_ipsecfw)
 	switch_ipsecfw
 	;;
-ad_switch)
-	ad_switch $1
-	;;
 getdns)
 	getdns
 	;;
@@ -1591,6 +1590,20 @@ getddnsip)
 	;;
 set_static)
 	set_static
+	;;
+smartdns_update)
+	smartdns_update
+	delay_prog smartdns_update
+	;;
+start_smartdns_update)
+	echo '0' >/tmp/smartdns_update
+	;;
+mosdns_update)
+	mosdns_update
+	delay_prog mosdns_update
+	;;
+start_mosdns_update)
+	echo '0' >/tmp/mosdns_update
 	;;
 *)
 	echo "No this function!"
