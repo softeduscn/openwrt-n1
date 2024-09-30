@@ -19,3 +19,6 @@ rm -rf feeds/packages/net/trojan-go
 rm -rf feeds/packages/net/xray-core
 rm -rf feeds/packages/net/smartdns
 rm -rf feeds/luci/applications/luci-app-smartdns
+rm -rf feeds/packages/net/v2ray-geodata
+rm -rf feeds/packages/lang/golang
+mv package/lean/golang feeds/packages/lang

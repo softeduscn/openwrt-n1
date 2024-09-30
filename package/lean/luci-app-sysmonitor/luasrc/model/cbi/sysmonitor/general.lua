@@ -87,8 +87,8 @@ o = s:option(Value, "cycle", translate("Run cycle(s)"))
 o.width = "auto"
 o.rmempty = true
 
-o = s:option(Value, "first", translate("First run cycle(s)"))
-o.width = "auto"
-o.rmempty = true
+--o = s:option(Value, "first", translate("First run cycle(s)"))
+--o.width = "auto"
+--o.rmempty = true
 
 return m

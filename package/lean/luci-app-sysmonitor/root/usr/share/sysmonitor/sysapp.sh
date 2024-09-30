@@ -59,12 +59,10 @@ set_static() {
 }
 
 firstrun(){
-	sed -i '/start_mosdns_update/d' /etc/crontabs/root
-	sed -i '/start_smartdns_update/d' /etc/crontabs/root
-	echo "0 2 */3 * * /usr/share/sysmonitor/sysapp.sh start_mosdns_update" >> /etc/crontabs/root
-	echo "0 2 */3 * * /usr/share/sysmonitor/sysapp.sh start_smartdns_update" >> /etc/crontabs/root
-	echo '0' >/tmp/mosdns_update
-	echo '0' >/tmp/smartdns_update
+	sed -i '/update_dns_data/d' /etc/crontabs/root
+	#每周六2点启动dns数据更新
+	echo "0 2 * * 6 /usr/share/sysmonitor/sysapp.sh update_dns_data" >> /etc/crontabs/root
+	$APP_PATH/sysapp.sh update_dns_data
 	if [ "$(cat /etc/shadow|grep root:::|wc -l)" != 0 ]; then
 		utc_secs=$(date +%s)
 		days=$(( utc_secs / 86400 ))
@@ -88,13 +86,14 @@ firstrun(){
 	mvdir $sysdir $destdir
 	setdns
 	echo "60=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
+	echo "90=ntpd -n -q -p ntp.aliyun.com" >> /tmp/delay.sign
 	echo 0 > /tmp/vpn_status
 	getip
 	uci del network.utun
 	uci commit network
 	/etc/init.d/network restart &
 	touch /tmp/makehost.sign
-	touch /tmp/firstrun
+#	touch /tmp/firstrun
 	sed -i 's_downloads.openwrt.org_mirrors.cloud.tencent.com/openwrt_' /etc/opkg/distfeeds.conf
 	[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
 	crontab /etc/crontabs/root
@@ -739,11 +738,16 @@ do
 	program=$(uci get sysmonitor.@prog_list[$num].program)
 	status=$(cat /tmp/delay.list|grep $program|wc -l)
 	if [ "$status" == 0 ]; then
-		time=$(uci get sysmonitor.@prog_list[$num].cycle)
+#		if [ -f /tmp/firstrun ]; then
+#			time=$(uci get sysmonitor.@prog_list[$num].first)
+#		else
+			time=$(uci get sysmonitor.@prog_list[$num].cycle)
+#		fi
 		echo $time'='$path' '$program >> /tmp/delay.sign
 	fi
 	num=$((num+1))
 done
+#[ -f /tmp/firstrun ] && rm /tmp/firstrun
 }
 
 next_vpn() {
@@ -1234,7 +1238,7 @@ sysbutton() {
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ -f /etc/init.d/smartdns ]; then
 			dnsname='SmartDNS'
-			[ "$(cat /tmp/smartdns_update)" == 0 ] && dnsname=$dnsname'***'
+			[ -f /tmp/smartdns_update ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'SmartDNS' ]; then
 				if [ ! -n "$(pgrep -f smartdns)" ]; then
 					button=' <button class=button2 title="SmartDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
@@ -1250,7 +1254,7 @@ sysbutton() {
 		fi
 		if [ -f /etc/init.d/mosdns ]; then
 			dnsname='MosDNS'
-			[ "$(cat /tmp/mosdns_update)" == 0 ] && dnsname=$dnsname'***'
+			[ -f /tmp/mosdns_update ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'MosDNS' ]; then
 				if [ ! -n "$(pgrep -f mosdns)" ]; then
 					button=' <button class=button2 title="MosDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
@@ -1422,19 +1426,19 @@ chkapp() {
 }
 
 mosdns_update() {
-	if [ "$(cat /tmp/mosdns_update)" == 0 ]; then
+	if [ -f /tmp/mosdns_update ]; then
 		/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1
-		[ "$?" == 0 ] && echo 1 > /tmp/mosdns_update
+		[ "$?" == 0 ] && rm /tmp/mosdns_update
 	fi
 }
 
 smartdns_update() {
-	if [ "$(cat /tmp/smartdns_update)" == 0 ]; then
+	if [ -f /tmp/smartdns_update ]; then
 		tmpdir=$(mktemp -d) || exit 1
 		/usr/share/sysmonitor/gfwlist2dnsmasq.sh -l -o $tmpdir/gfwlist > /dev/null 2>&1
 		if [ $? == 0 ]; then
 			cp $tmpdir/gfwlist /etc/smartdns/domain-set
-			echo 1 > /tmp/smartdns_update
+			rm /tmp/smartdns_update
 			dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 			[ "$dns" == 'SmartDNS' ] && reload smartdns
 			continue
@@ -1469,14 +1473,6 @@ logup)
 	;;
 makehost)
 	makehost
-	;;
-cron_dns)
-	status=$(ping_url www.baidu.com.cn)
-	if [ $status == 0 ] ; then
-		dns=$(echo $(uci_get_by_name $NAME $NAME dns)|tr A-Z a-z)
-		/etc/init.d/$dns restart
-	fi
-	delay_prog cron_dns
 	;;
 cron_regvpn)
 	regvpn
@@ -1595,15 +1591,13 @@ smartdns_update)
 	smartdns_update
 	delay_prog smartdns_update
 	;;
-start_smartdns_update)
-	echo '0' >/tmp/smartdns_update
-	;;
 mosdns_update)
 	mosdns_update
 	delay_prog mosdns_update
 	;;
-start_mosdns_update)
-	echo '0' >/tmp/mosdns_update
+update_dns_data)
+	touch /tmp/mosdns_update
+	touch /tmp/smartdns_update
 	;;
 *)
 	echo "No this function!"

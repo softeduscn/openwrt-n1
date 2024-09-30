@@ -9,14 +9,13 @@ api:
 include: []
 
 plugins:
-
   # 自定义hosts
   - tag: localhosts
     type: hosts
     args:
      files:
         - "/etc/mosdns/rule/hosts.txt"
-     
+
   # 国内域名
   - tag: geosite_cn
     type: domain_set
@@ -46,7 +45,7 @@ plugins:
       lazy_cache_ttl: 86400
       dump_file: "/etc/mosdns/cache.dump"
       dump_interval: 600
-    
+
   # 转发至本地服务器
   - tag: forward_local
     type: forward
@@ -63,7 +62,9 @@ plugins:
       upstreams:
         - addr: tls://8.8.8.8:853
           enable_pipeline: true
-          
+        - addr: tcp://8.8.4.4
+        - addr: tcp://1.1.1.1
+
   # 国内解析
   - tag: local_sequence
     type: sequence
@@ -121,7 +122,7 @@ plugins:
     args:
       - matches: qname $geosite_no_cn
         exec: $remote_sequence
-     
+
   # 主要的运行逻辑插件
   # sequence 插件中调用的插件 tag 必须在 sequence 前定义，
   # 否则 sequence 找不到对应插件。
@@ -135,7 +136,7 @@ plugins:
       - exec: $query_is_no_local_domain
       - exec: jump has_resp_sequence
       - exec: $fallback
-        
+
   # 启动 udp 服务器。
   - tag: udp_server
     type: udp_server
