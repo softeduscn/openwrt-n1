@@ -61,9 +61,8 @@ plugins:
         - addr: "tls://dns.google"
           dial_addr: "8.8.4.4"
           enable_pipeline: true
-        - addr: "tls://dns.google"
+        - addr: "https://dns.google/dns-query"
           dial_addr: "8.8.8.8"
-          enable_pipeline: true
 
   # cloudflare doh dot h3
   - tag: cloudflare

@@ -1446,16 +1446,16 @@ check_ip() {
 
 mosdns_whitelist() {
 	whitelist='/etc/mosdns/rule/whitelist.txt'
-	localip='/etc/mosdns/rule/vpnip.txt'
+	vpnip='/etc/mosdns/rule/vpnip.txt'
 	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $whitelist
-	[ -f $localip ] && rm $localip
-	touch $localip
+	[ -f $vpnip ] && rm $vpnip
+	touch $vpnip
 	addrlist=$(cat $whitelist)	
 	for i in $addrlist
 	do
 		ip=$(check_ip $i)
 		if [ -n "$ip" ]; then
-			echo $ip >> $localip
+			echo $ip >> $vpnip
 			sed -i "/"$ip"/d" $whitelist
 		fi
 	done
