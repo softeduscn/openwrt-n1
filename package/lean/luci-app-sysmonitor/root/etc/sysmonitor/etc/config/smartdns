@@ -3,7 +3,7 @@ config smartdns
 	option enabled '1'
 	option server_name 'smartdns'
 	option tcp_server '1'
-	option port '6053'
+	option port '53'
 	option prefetch_domain '1'
 	option resolve_local_hostnames '1'
 	option cache_size '512'
@@ -29,6 +29,8 @@ config smartdns
 	option mdns_lookup '1'
 	option speed_check_mode 'none'
 	option seconddns_no_speed_check '1'
+	option seconddns_no_rule_nameserver '1'
+	option seconddns_no_dualstack_selection '1'
 
 config server
 	option name 'PDNS'

@@ -9,6 +9,76 @@ api:
 include: []
 
 plugins:
+ ################ DNS #################
+ # dnspod doh dot
+  - tag: dnspod
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://doh.pub/dns-query"
+          dial_addr: "1.12.12.12"
+        - addr: "https://doh.pub/dns-query"
+          dial_addr: "120.53.53.53"
+
+        - addr: "tls://dot.pub"
+          dial_addr: "1.12.12.12"
+          enable_pipeline: true
+        - addr: "tls://dot.pub"
+          dial_addr: "120.53.53.53"
+          enable_pipeline: true
+
+  # ali doh dot h3
+  - tag: ali
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.6.6.6"
+
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "2400:3200:baba::1"
+          enable_pipeline: true
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "223.5.5.5"
+          enable_pipeline: true
+
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.5.5.5"
+          enable_http3: true
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "2400:3200::1"
+          enable_http3: true
+
+  # google doh dot h3
+  - tag: google
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: tcp://8.8.8.8
+        - addr: "tls://dns.google"
+          dial_addr: "8.8.4.4"
+          enable_pipeline: true
+        - addr: "tls://dns.google"
+          dial_addr: "8.8.8.8"
+          enable_pipeline: true
+
+  # cloudflare doh dot h3
+  - tag: cloudflare
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: tcp://1.1.1.1
+        - addr: "https://1.1.1.1/dns-query"
+          dial_addr: "1.1.1.1"
+
+        - addr: "tls://1.1.1.1"
+          dial_addr: "1.1.1.1"
+          enable_pipeline: true # TCP/DoT 启用 RFC 7766 新的 query pipelining 连接复用模式
+
   # 自定义hosts
   - tag: localhosts
     type: hosts
@@ -22,6 +92,7 @@ plugins:
     args:
       files:
         - "/var/mosdns/geosite_cn.txt"
+        - "/etc/mosdns/rule/whitelist.txt"
 
   # 国内 IP
   - tag: geoip_cn
@@ -29,13 +100,15 @@ plugins:
     args:
       files:
         - "/var/mosdns/geoip_cn.txt"
+        - "/etc/mosdns/rule/vpnip.txt"
 
   # 国外域名
   - tag: geosite_no_cn
     type: domain_set
     args:
       files:
-        - "/var/mosdns/geosite_geolocation-!cn.txt"      
+        - "/var/mosdns/geosite_geolocation-!cn.txt" 
+        - "/etc/mosdns/rule/greylist.txt"
         
   # 缓存
   - tag: lazy_cache
@@ -46,24 +119,37 @@ plugins:
       dump_file: "/etc/mosdns/cache.dump"
       dump_interval: 600
 
+  # 调整 ttl
+  - tag: ttl_1m
+    type: sequence
+    args:
+      - exec: ttl 60
+  - tag: ttl_5m
+    type: sequence
+    args:
+      - exec: ttl 300
+  - tag: ttl_1h
+    type: sequence
+    args:
+      - exec: ttl 3600
+
   # 转发至本地服务器
   - tag: forward_local
-    type: forward
+    type: fallback
     args:
-      upstreams:
-        - addr: "https://doh.pub/dns-query"
-          bootstrap: 180.76.76.76
-        - addr: 119.29.29.29
-
+      primary: dnspod # 主dns
+      secondary: ali # 备用dns
+      threshold: 500
+      always_standby: true # 副可执行插件始终待命
+      
   # 转发至远程服务器
   - tag: forward_remote
-    type: forward
+    type: "fallback"
     args:
-      upstreams:
-        - addr: tls://8.8.8.8:853
-          enable_pipeline: true
-        - addr: tcp://8.8.4.4
-        - addr: tcp://1.1.1.1
+      primary: google # 主dns
+      secondary: cloudflare # 备用dns
+      threshold: 700 # 无响应切换 毫秒
+      always_standby: true # 副可执行插件始终待命
 
   # 国内解析
   - tag: local_sequence
@@ -100,15 +186,6 @@ plugins:
     args:
       - exec: $remote_sequence
 
-  # fallback 用远程服务器 sequence
-  - tag: fallback
-    type: fallback
-    args:
-      primary: query_is_local_ip
-      secondary: query_is_remote
-      threshold: 500
-      always_standby: true
-
   # 查询国内域名
   - tag: query_is_local_domain
     type: sequence
@@ -123,20 +200,91 @@ plugins:
       - matches: qname $geosite_no_cn
         exec: $remote_sequence
 
-  # 主要的运行逻辑插件
+  - tag: reject_qtype65
+    type: sequence
+    args:
+#      - exec: query_summary reject_qtype65
+      - exec: reject 3
+
+  - tag: reject_null_domain
+    type: sequence
+    args:
+      - exec: query_summary reject_null_domain
+      - exec: reject 3
+
+  - tag: other_seq # 其他特殊情况统一使用 dns_cn 处理
+    type: sequence
+    args:
+      - exec: query_summary other
+      - exec: $forward_local
+      
+  # 其他所有情况
+  - tag: query_other 
+    type: sequence
+    args:
+      # - exec: $no_ecs 
+      - exec: $other_seq
+
+  - tag: pre_handle
+    type: sequence
+    args:
+      - exec: $ttl_1h # ttl 1h
+      - exec: accept # 接受响应,终止流程
+
+  - tag: main_handle
+    type: sequence
+    args:
+      - exec: $ttl_5m # ttl 5min
+      - exec: accept # 接受响应,终止流程
+
+  # pre_sequence 结果处理 
+  - tag: has_resp_pre
+    type: sequence
+    args:
+      - matches: has_resp # 如果 pre 序列已有响应
+        exec: goto pre_handle
+
+  # main_sequence 结果处理
+  - tag: has_resp_main
+    type: sequence
+    args:
+      - matches: has_resp
+        exec: goto main_handle
+
+  # pre_sequence
+  - tag: pre_sequence
+    type: sequence
+    args:
+      - exec: $lazy_cache
+      - exec: $localhosts 
+      - matches: qtype 65 # TYPE 65 类型|DNS服务器状态
+        exec: $reject_qtype65
+      - matches: "qname keyword::" # 无效域名
+        exec: $reject_null_domain
+      - matches: qtype 12 # TYPE 12 类型|反查域名 PTR 记录
+        exec: $query_other
+      - matches: qtype 255 # TYPE 255 类型|DNS服务器拓展支持
+        exec: $query_other
+      - exec: jump has_resp_pre
+
+# 主要的运行逻辑插件
   # sequence 插件中调用的插件 tag 必须在 sequence 前定义，
   # 否则 sequence 找不到对应插件。
   - tag: main_sequence
     type: sequence
     args:
-      - exec: $lazy_cache
-      - exec: $localhosts
       - exec: $query_is_local_domain
-      - exec: jump has_resp_sequence
+      - exec: jump has_resp_main
       - exec: $query_is_no_local_domain
-      - exec: jump has_resp_sequence
-      - exec: $fallback
+      - exec: jump has_resp_main
 
+  - tag: sequence
+    type: sequence
+    args:
+      - exec: metrics_collector metrics
+      - exec: $pre_sequence # 预处理
+      - exec: $main_sequence # 主执行序列
+      
   # 启动 udp 服务器。
   - tag: udp_server
     type: udp_server

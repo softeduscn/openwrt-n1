@@ -1425,8 +1425,45 @@ chkapp() {
 	[ "$(pgrep -f netconn.sh|wc -l)" -gt 1 ] && killall netconn.sh
 }
 
+check_ip() {
+	if [ ! -n "$1" ]; then
+		#echo "NO IP!"
+		echo ""
+	else
+ 		IP=$1
+    		VALID_CHECK=$(echo $IP|awk -F. '$1<=255&&$2<=255&&$3<=255&&$4<=255{print "yes"}')
+		if echo $IP|grep -E "^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$">/dev/null; then
+			if [ ${VALID_CHECK:-no} == "yes" ]; then
+				# echo "IP $IP available."
+				echo $IP
+			else
+				#echo "IP $IP not available!"
+				echo ""
+			fi
+		fi
+	fi
+}
+
+mosdns_whitelist() {
+	whitelist='/etc/mosdns/rule/whitelist.txt'
+	localip='/etc/mosdns/rule/vpnip.txt'
+	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $whitelist
+	[ -f $localip ] && rm $localip
+	touch $localip
+	addrlist=$(cat $whitelist)	
+	for i in $addrlist
+	do
+		ip=$(check_ip $i)
+		if [ -n "$ip" ]; then
+			echo $ip >> $localip
+			sed -i "/"$ip"/d" $whitelist
+		fi
+	done
+}
+
 mosdns_update() {
 	if [ -f /tmp/mosdns_update ]; then
+		mosdns_whitelist
 		/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1
 		[ "$?" == 0 ] && rm /tmp/mosdns_update
 	fi
