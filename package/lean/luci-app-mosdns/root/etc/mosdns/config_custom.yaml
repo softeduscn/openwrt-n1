@@ -254,7 +254,6 @@ plugins:
   - tag: pre_sequence
     type: sequence
     args:
-      - exec: $lazy_cache
       - exec: $localhosts 
       - matches: qtype 65 # TYPE 65 类型|DNS服务器状态
         exec: $reject_qtype65
@@ -272,6 +271,7 @@ plugins:
   - tag: main_sequence
     type: sequence
     args:
+      - exec: $lazy_cache
       - exec: $query_is_local_domain
       - exec: jump has_resp_main
       - exec: $query_is_no_local_domain
