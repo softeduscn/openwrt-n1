@@ -215,7 +215,9 @@ get_args(){
 
 process(){
     # Set Global Var
-    BASE_URL='https://github.com/gfwlist/gfwlist/raw/master/gfwlist.txt'
+    BASE_URL='https://pagure.io/gfwlist/raw/master/f/gfwlist.txt'
+    BASE_URL='https://bitbucket.org/gfwlist/gfwlist/raw/HEAD/gfwlist.txt'
+    BASE_URL='https://gitlab.com/gfwlist/gfwlist/raw/master/gfwlist.txt'
     TMP_DIR=`mktemp -d /tmp/gfwlist2dnsmasq.XXXXXX`
     BASE64_FILE="$TMP_DIR/base64.txt"
     GFWLIST_FILE="$TMP_DIR/gfwlist.txt"

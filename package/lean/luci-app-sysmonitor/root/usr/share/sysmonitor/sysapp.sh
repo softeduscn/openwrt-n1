@@ -59,7 +59,9 @@ set_static() {
 }
 
 firstrun(){
-	sed -i '/update_dns_data/d' /etc/crontabs/root
+	sed -i '/sysapp.sh/d' /etc/crontabs/root
+	#每天2点更新vpn地址集
+	echo "0 2 * * * /usr/share/sysmonitor/sysapp.sh update_vpn_data" >> /etc/crontabs/root
 	#每周六2点启动dns数据更新
 	echo "0 2 * * 6 /usr/share/sysmonitor/sysapp.sh update_dns_data" >> /etc/crontabs/root
 	$APP_PATH/sysapp.sh update_dns_data
@@ -85,18 +87,18 @@ firstrun(){
 	destdir=''
 	mvdir $sysdir $destdir
 	setdns
-	echo "60=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
-	echo "90=ntpd -n -q -p ntp.aliyun.com" >> /tmp/delay.sign
+	echo "45=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
+	echo "15=ntpd -n -q -p ntp.aliyun.com" >> /tmp/delay.sign
 	echo 0 > /tmp/vpn_status
 	getip
 	uci del network.utun
 	uci commit network
 	/etc/init.d/network restart &
 	touch /tmp/makehost.sign
-#	touch /tmp/firstrun
 	sed -i 's_downloads.openwrt.org_mirrors.cloud.tencent.com/openwrt_' /etc/opkg/distfeeds.conf
 	[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
 	crontab /etc/crontabs/root
+	echo "15=touch /tmp/firstrun" >> /tmp/delay.sign
 }
 
 mvdir() {
@@ -672,28 +674,12 @@ reload() {
 	fi
 }
 
-service_dns() {
+close_dns() {
+	[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
+	[ -n "$(pgrep -f mosdns)" ] && /etc/init.d/mosdns stop 2>/dev/null
 	uci set dhcp.@dnsmasq[0].port=''
 	uci commit dhcp
 	/etc/init.d/dnsmasq reload
-	dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
-	case $dns in
-	SmartDNS)
-		[ -f /etc/init.d/mosdns ] && mosdns_stop
-		setdns
-		;;
-	MosDNS)
-		[ -f /etc/init.d/smartdns ] && smartdns_stop
-		setdns
-		;;
-	*)
-		[ -f /etc/init.d/smartdns ] && smartdns_stop
-		[ -f /etc/init.d/mosdns ] && mosdns_stop
-		uci set dhcp.@dnsmasq[0].port=''
-		uci commit dhcp
-		/etc/init.d/dnsmasq reload
-		;;
-	esac
 }
 
 close_vpn() {
@@ -703,17 +689,67 @@ close_vpn() {
 	selvpn
 }
 
-get_cycle() {
+setdelay_offon() {
+	enabled=0
+	[ -n "$2" ] && enabled=1		
+	prog_num=$(cat /etc/config/sysmonitor|grep prog_list|wc -l)
+	num=0
+	while (($num<$prog_num))
+	do
+		program=$(uci_get_by_name $NAME @prog_list[$num] program)
+		if [ "$program" == $1 ]; then
+			uci_set_by_name $NAME @prog_list[$num] enabled $enabled
+			uci commit $NAME
+			break
+		fi
+		num=$((num+1))
+	done
+}
+
+getdata() {
+	data_num=$(cat /etc/config/sysmonitor|grep data_list|wc -l)
+	num=0
+	status=-1
+	while (($num<$data_num))
+	do
+		datalist=$(uci_get_by_name $NAME @data_list[$num] datalist)
+		if [ "$datalist" == $1 ]; then
+			status=$(uci_get_by_name $NAME @data_list[$num] $2)
+			break
+		fi
+		num=$((num+1))
+	done
+echo $status
+}
+
+getdelay() {
 	prog_num=$(cat /etc/config/sysmonitor|grep prog_list|wc -l)
 	num=0
 	status=-1
 	while (($num<$prog_num))
 	do
-		program=$(uci get sysmonitor.@prog_list[$num].program)
-		path=$(uci get sysmonitor.@prog_list[$num].path)
-		cycle=$(uci get sysmonitor.@prog_list[$num].cycle)
+		program=$(uci_get_by_name $NAME @prog_list[$num] program)
 		if [ "$program" == $1 ]; then
-			status=$cycle'='$path' '$program
+			status=$(uci_get_by_name $NAME @prog_list[$num] $2)
+			break
+		fi
+		num=$((num+1))
+	done
+echo $status
+}
+
+get_delay() {
+	prog_num=$(cat /etc/config/sysmonitor|grep prog_list|wc -l)
+	num=0
+	status=-1
+	while (($num<$prog_num))
+	do
+		program=$(uci_get_by_name $NAME @prog_list[$num] program)
+		path=$(uci_get_by_name $NAME @prog_list[$num] path "/usr/share/sysmonitor/sysapp.sh")
+		cycle=$(uci_get_by_name $NAME @prog_list[$num] cycle 5)
+		enabled=$(uci_get_by_name $NAME @prog_list[$num] enabled 0)
+		if [ "$program" == $1 ]; then
+			status=$enabled$cycle'='$path' '$program
 			break
 		fi
 		num=$((num+1))
@@ -722,11 +758,19 @@ echo $status
 }
 
 delay_prog() {
-	status=$(get_cycle $1)
-	if [ -n "$2" ]; then
-		status=$2'='$(echo $status|cut -d'=' -f2-)
+	status=$(get_delay $1)
+	if [ "$status" != "" ]; then
+		enabled=${status:0:1}
+		status=${status:1}
+		program=$(echo $status|cut -d' ' -f2)
+		if [ -n "$2" ]; then
+			status=$2'='$(echo $status|cut -d'=' -f2-)
+			setdelay_offon $program 1
+			echo $status >> /tmp/delay.sign
+		else
+			[ "$enabled" == 1 ] && echo $status >> /tmp/delay.sign
+		fi	
 	fi
-	echo $status >> /tmp/delay.sign	
 }
 
 chk_prog() {
@@ -734,20 +778,19 @@ prog_num=$(cat /etc/config/sysmonitor|grep prog_list|wc -l)
 num=0
 while (($num<$prog_num))
 do
-	path=$(uci get sysmonitor.@prog_list[$num].path)
-	program=$(uci get sysmonitor.@prog_list[$num].program)
+	program=$(uci_get_by_name $NAME @prog_list[$num] program)
+	path=$(uci_get_by_name $NAME @prog_list[$num] path "/usr/share/sysmonitor/sysapp.sh")
+	enabled=$(uci_get_by_name $NAME @prog_list[$num] enabled 0)
 	status=$(cat /tmp/delay.list|grep $program|wc -l)
 	if [ "$status" == 0 ]; then
-#		if [ -f /tmp/firstrun ]; then
-#			time=$(uci get sysmonitor.@prog_list[$num].first)
-#		else
-			time=$(uci get sysmonitor.@prog_list[$num].cycle)
-#		fi
-		echo $time'='$path' '$program >> /tmp/delay.sign
+	cycle=$(uci_get_by_name $NAME @prog_list[$num] cycle 200)
+		enabled=$(uci_get_by_name $NAME @prog_list[$num] enabled 0)
+		[ "$enabled" == 1 ] && echo $cycle'='$path' '$program >> /tmp/delay.sign
+	else	
+		[ "$enabled" == 0 ] && sed -i "/$program/d" /tmp/delay.list
 	fi
 	num=$((num+1))
 done
-#[ -f /tmp/firstrun ] && rm /tmp/firstrun
 }
 
 next_vpn() {
@@ -1027,7 +1070,6 @@ update_ddns() {
 	done
 	echoddns '-------------------'
 	rm /tmp/update_ddns
-	echo "90=$APP_PATH/sysapp.sh getddnsip" >> /tmp/delay.sign
 }
 
 getddnsip() {
@@ -1134,11 +1176,28 @@ sysbutton() {
 		done < /tmp/delay.list
 		button=$button'</B>'
 		;;
+	data_list)
+		data_num=$(cat /etc/config/sysmonitor|grep data_list|wc -l)
+		data_list=$(uci_get_by_name $NAME $NAME datalist)
+		num=0
+		status=-1
+		button=''
+		while (($num<$data_num))
+		do
+			name=$(uci_get_by_name $NAME @data_list[$num] name)
+			datalist=$(uci_get_by_name $NAME @data_list[$num] datalist)
+			color='button1'
+			[ "$data_list" == $datalist ] && color='button3'
+			button=$button' <button class="'$color'"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=datalist&sys1='$datalist'&redir=data">'$name'</a></button>'
+			num=$((num+1))
+		done
+		;;
 	node_list)
 		vpn=$(uci get passwall.@global[0].tcp_node)
 		nodenums=$(cat /tmp/nodeinfo|wc -l)
 		nodenum=$(sed -n /$vpn/= /tmp/nodeinfo)
-		button=$button'<button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=Updatenode&sys1=&redir=node">UpdateNODE('$nodenum'-'$nodenums')</a></button>'
+		name=$(getdelay checknode name)
+		button=$button'<button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=checknode&sys1=&redir=general">'$name'('$nodenum'-'$nodenums')</a></button>'
 		vpns=$(cat /tmp/vpns)
 		type=$(echo ${vpns:1}|cut -d'-' -f2|cut -d' ' -f1|tr A-Z a-z)
 		button=$button' <button class="button1" title="Goto VPN setting"><a href="/cgi-bin/luci/admin/services/'$type'" target="_blank">'$type'-></a></button><BR><BR>'
@@ -1220,13 +1279,14 @@ sysbutton() {
 		fi
 		;;
 	buttontitle)
+		button=''
 		redir='system'
 		[ "$(uci get sysmonitor.sysmonitor.ddnslog)" == 1 ] && redir='log'
 		#button=' <button class="button1"><a href="/cgi-bin/luci/admin/services/ttyd" target="_blank">Terminal</a></button>'
-		button=$button' <button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=Updatenode&sys1=&redir='$redir'">UpdateNODE</a></button>'
+		#button=$button' <button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=checknode&sys1=&redir='$redir'">UpdateNODE</a></button>'
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ "$dns" != "NULL" ]; then
-			button=$button' <button class=button4 title="Close DNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=close_dns&sys1=&redir=system">CloseDNS</a></button>'
+			button=$button' <button class=button4 title="Close DNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=closedns&sys1=&redir=system">CloseDNS</a></button>'
 		fi
 		;;
 	button)
@@ -1238,7 +1298,8 @@ sysbutton() {
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ -f /etc/init.d/smartdns ]; then
 			dnsname='SmartDNS'
-			[ -f /tmp/smartdns_update ] && dnsname=$dnsname'***'
+			status=$(get_delay smartdns_update)
+			[ "${status:0:1}" == 1 ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'SmartDNS' ]; then
 				if [ ! -n "$(pgrep -f smartdns)" ]; then
 					button=' <button class=button2 title="SmartDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
@@ -1254,7 +1315,8 @@ sysbutton() {
 		fi
 		if [ -f /etc/init.d/mosdns ]; then
 			dnsname='MosDNS'
-			[ -f /tmp/mosdns_update ] && dnsname=$dnsname'***'
+			status=$(get_delay mosdns_update)
+			[ "${status:0:1}" == 1 ] && dnsname=$dnsname'***'
 			if [ "$dns" == 'MosDNS' ]; then
 				if [ ! -n "$(pgrep -f mosdns)" ]; then
 					button=' <button class=button2 title="MosDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
@@ -1307,6 +1369,10 @@ echo $button
 	
 sysmenu() {
 	case $1 in
+	datalist)
+		uci set sysmonitor.sysmonitor.datalist=$2
+		uci commit sysmonitor
+		;;
 	stopdl)
 		stopdl
 		;;
@@ -1356,10 +1422,10 @@ sysmenu() {
 			sed -i s/none/block/g $file
 		fi
 		;;
-	close_dns)
+	closedns)
 		uci set sysmonitor.sysmonitor.dns='NULL'
 		uci commit sysmonitor
-		service_dns
+		close_dns
 		;;
 	service_smartdns)
 		uci set sysmonitor.sysmonitor.dns='SmartDNS'
@@ -1386,10 +1452,6 @@ sysmenu() {
 		;;
 	CloseVPN)
 		close_vpn
-		;;
-	UpdateDDNS)
-		update_ddns
-		getddnsip
 		;;
 	UpdateVPN)
 		getvpn
@@ -1444,47 +1506,107 @@ check_ip() {
 	fi
 }
 
-mosdns_whitelist() {
-	whitelist='/etc/mosdns/rule/whitelist.txt'
-	vpnip='/etc/mosdns/rule/vpnip.txt'
-	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $whitelist
+get_ip() {
+	if [ ! -n "$1" ]; then
+		#echo "NO IP!"
+		echo ""
+	else
+ 		IP=$1
+		#echo "IP is name convert ip!"
+		dnsip=$(ping -4 -c 1 -W 1 $IP|grep from|cut -d' ' -f4|cut -d':' -f1)
+#		if [ ! -n "$dnsip" ]; then
+			#echo "Inull"
+			echo $dnsip
+#		else
+#			#echo "again check"
+#			echo $(get_ip $dnsip)
+#		fi
+	fi
+}
+
+
+mosdns_update() {
+	mosdns_dir='/etc/mosdns/rule'
+	vpnsite=$mosdns_dir'/vpnsite.txt'
+	vpnip=$mosdns_dir'/vpnip.txt'
+	tmpdir=$(mktemp -d) || exit 1
+	#url='raw.githubusercontent.com'
+	#url='cdn.jsdelivr.net'
+	url='fastly.jsdelivr.net'
+	wget -O $tmpdir/apple-cn.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/apple-cn.txt
+	[ $? == 0 ] && cp $tmpdir/apple-cn.txt $mosdns_dir
+	wget -O $tmpdir/google-cn.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/google-cn.txt
+	[ $? == 0 ] && cp $tmpdir/google-cn.txt $mosdns_dir
+	if [ $? == 0 ]; then
+		setdelay_offon mosdns_update
+	fi
+	#wget -O $tmpdir/gfw.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt
+	#[ $? == 0 ] && cp $tmpdir/gfw.txt $mosdns_dir
+	rm -rf $tmpdir
+	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $vpnsite
 	[ -f $vpnip ] && rm $vpnip
 	touch $vpnip
-	addrlist=$(cat $whitelist)	
+	addrlist=$(cat $vpnsite)	
 	for i in $addrlist
 	do
 		ip=$(check_ip $i)
 		if [ -n "$ip" ]; then
 			echo $ip >> $vpnip
-			sed -i "/"$ip"/d" $whitelist
+			sed -i "/"$ip"/d" $vpnsite
 		fi
 	done
-}
-
-mosdns_update() {
-	if [ -f /tmp/mosdns_update ]; then
-		mosdns_whitelist
-		/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1
-		[ "$?" == 0 ] && rm /tmp/mosdns_update
-	fi
+	[ -n "$(pgrep -f mosdns)" ] && /etc/init.d/mosdns restart
+	#/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1			
 }
 
 smartdns_update() {
-	if [ -f /tmp/smartdns_update ]; then
-		tmpdir=$(mktemp -d) || exit 1
-		/usr/share/sysmonitor/gfwlist2dnsmasq.sh -l -o $tmpdir/gfwlist > /dev/null 2>&1
-		if [ $? == 0 ]; then
-			cp $tmpdir/gfwlist /etc/smartdns/domain-set
-			rm /tmp/smartdns_update
-			dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
-			[ "$dns" == 'SmartDNS' ] && reload smartdns
-			continue
-		fi
-		rm -rf $tmpdir
+	tmpdir=$(mktemp -d) || exit 1
+	/usr/share/sysmonitor/gfwlist2dnsmasq.sh -l -o $tmpdir/gfwlist > /dev/null 2>&1
+	if [ $? == 0 ]; then
+		cp $tmpdir/gfwlist /etc/smartdns/domain-set
+		setdelay_offon smartdns_update
+		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
+		[ "$dns" == 'SmartDNS' ] && reload smartdns
+		continue
+	fi
+	rm -rf $tmpdir
+}
+
+pwdata_update() {
+	status=$(cat /tmp/vpns)
+	if [ "${status:0:1}" == 1 ]; then
+		uci set passwall.@global_rules[0].geoip_update=1
+		uci set passwall.@global_rules[0].geosite_update=1
+		uci commit passwall
+		/usr/share/passwall/rule_update.lua
+		[ $? == 0 ] && setdelay_offon pwdata_update
+		[ $? == 0 ] && [ -n "$(pgrep -f mosdns)" ] && /etc/init.d/mosdns restart
 	fi
 }
 
-#[ "$(pgrep -f sysmonitor.sh|wc -l)" == 0 ] && $APP_PATH/monitor.sh
+vpnsets() {
+	status=$(ping_url 192.168.1.1)
+	if [ "$status" != 0 ]; then
+		vpnsets='/tmp/vpnsets'
+		nodes=$(cat /etc/config/passwall|grep "config nodes"|cut -d' ' -f3|sed "s/\'//g")
+		num=0
+		[ -f $vpnsets ] && rm $vpnsets
+		for i in $nodes 
+		do
+			num=$((num+1))
+			addr=$(uci get passwall.$i.address)
+			ip=$(check_ip $addr)
+			[ ! -n "$ip" ] && ip=$(get_ip $addr)
+			len=$(echo $addr|awk '{print length}')
+			addr=$addr'\t'
+			[ "$len" -le 15 ] && addr=$addr'\t'
+			echo -e $num'\t'$i' '$addr$ip >> $vpnsets
+		done
+		setdelay_offon vpnsets
+	fi
+	delay_prog vpnsets
+}
+
 arg1=$1
 shift
 case $arg1 in
@@ -1518,10 +1640,6 @@ cron_regvpn)
 cron_chkvpn)
 	getvpn
 	delay_prog cron_chkvpn
-	;;
-update_ddns)
-	update_ddns
-	delay_prog update_ddns
 	;;
 checknode)
 	checknode
@@ -1601,11 +1719,6 @@ next_vpn)
 nextvpn)
 	nextvpn
 	;;
-chkprog)
-	chk_prog
-	chkprog=$(uci_get_by_name $NAME $NAME chkprog 60)
-	echo $chkprog'='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.sign
-	;;
 firstrun)
 	firstrun
 	;;
@@ -1624,6 +1737,18 @@ getddnsip)
 set_static)
 	set_static
 	;;
+getdata)
+	getdata $1 $2
+	;;
+getdelay)
+	getdelay $1 $2
+	;;
+vpnsets)
+	vpnsets
+	;;
+pwdata_update)
+	pwdata_update
+	;;
 smartdns_update)
 	smartdns_update
 	delay_prog smartdns_update
@@ -1633,8 +1758,22 @@ mosdns_update)
 	delay_prog mosdns_update
 	;;
 update_dns_data)
-	touch /tmp/mosdns_update
-	touch /tmp/smartdns_update
+	setdelay_offon mosdns_update 1
+	setdelay_offon smartdns_update 1
+	setdelay_offon pwdata_update 1
+	;;
+update_vpn_data)
+	setdelay_offon vpnsets 1
+	;;
+chkprog)
+	chk_prog
+	chkprog=$(uci_get_by_name $NAME $NAME chkprog 60)
+	echo $chkprog'='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.sign
+	;;
+test)
+	status=$(get_delay $1)
+	echo ${status:0:1}
+	echo ${status:1}
 	;;
 *)
 	echo "No this function!"

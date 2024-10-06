@@ -12,10 +12,10 @@ function index()
 	entry({"admin", "sys", "sysmonitor", "system"}, cbi("sysmonitor/system"),_("System Settings"), 20).leaf = true
 	entry({"admin", "sys", "sysmonitor", "general"}, cbi("sysmonitor/general"),_("General Settings"), 30).leaf = true
 	entry({"admin", "sys", "sysmonitor", "node"},cbi("sysmonitor/node"),_("NODE"), 40).leaf = true
-	entry({"admin", "sys", "sysmonitor", "ddns"}, cbi("/sysmonitor/ddns"), _("DDNS"), 50).leaf = true
+--	entry({"admin", "sys", "sysmonitor", "ddns"}, cbi("/sysmonitor/ddns"), _("DDNS"), 50).leaf = true
 	entry({"admin", "sys", "sysmonitor", "host"},cbi("sysmonitor/host"),_("Host"), 60).leaf = true
 	entry({"admin", "sys", "sysmonitor", "wgusers"},cbi("sysmonitor/wgusers"),_("WGusers"), 75).leaf = true
-	entry({"admin", "sys", "sysmonitor", "domain"},cbi("sysmonitor/domain"),_("Domain"), 80).leaf = true
+	entry({"admin", "sys", "sysmonitor", "data"},cbi("sysmonitor/data"),_("DATA List"), 80).leaf = true
 	entry({"admin", "sys", "sysmonitor", "log"},cbi("sysmonitor/log"),_("Log"), 90).leaf = true
 
 	entry({"admin", "sys", "sysmonitor", "ip_status"}, call("action_ip_status")).leaf = true
@@ -24,6 +24,7 @@ function index()
 	entry({"admin", "sys", "sysmonitor", "prog_status"}, call("action_prog_status"))
 	entry({"admin", "sys", "sysmonitor", "service_button"}, call("service_button")).leaf = true
 	entry({"admin", "sys", "sysmonitor", "proglist"}, call("proglist"))
+	entry({"admin", "sys", "sysmonitor", "datalist"}, call("datalist"))
 	entry({"admin", "sys", "sysmonitor", "firmware"}, call("firmware"))
 	entry({"admin", "sys", "sysmonitor", "stopDL"}, call("stopDL"))
 	entry({"admin", "sys", "sysmonitor", "sysupgrade"}, call("sysupgrade"))
@@ -94,6 +95,10 @@ end
 
 function proglist()
 	luci.http.write(luci.sys.exec("/usr/share/sysmonitor/sysapp.sh sysbutton prog_list"))
+end
+
+function datalist()
+	luci.http.write(luci.sys.exec("/usr/share/sysmonitor/sysapp.sh sysbutton data_list"))
 end
 
 function sysmenu()

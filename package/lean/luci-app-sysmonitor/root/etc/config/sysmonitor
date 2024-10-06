@@ -1,7 +1,7 @@
 
 config sysmonitor 'sysmonitor'
 	option enable '1'
-	option ddns '1'
+	option ddns '0'
 	option ddnslog '0'
 	option ipaddr '192.168.1.110'
 	option netmask '255.255.255.0'
@@ -11,13 +11,14 @@ config sysmonitor 'sysmonitor'
 	option port '53'
 	option systime '10'
 	option chkvpn '0'
-	option chkprog '63'
+	option chkprog '30'
 	option chksys '180'
 	option chktest '120'
-	option prog '5'
+	option prog '15'
 	option nextvpn '1'
 	option nextvpntime '6'
 	option passwall '1'
+	option datalist 'apple-cn'
 	option firmware 'https://github.com/softeduscn/openwrt-n1/releases/download/ARMv8/openwrt_s905d_n1.img.gz'
 	list dnslist '119.29.29.29'
 
@@ -82,22 +83,17 @@ config ddns_list
 	option password 'dynuddns'
 	option getip 'curl -s --connect-timeout 1 http://members.3322.org/dyndns/getip'
 	option ipaddr ''
-	
-config prog_list
-	option program 'update_ddns'
-	option cycle '3600'
-	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '300'
-	option name '更新DDNS'
 
 config prog_list
+	option enabled '1'
 	option program 'checknode'
 	option cycle '600'
 	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '130'
+	option first '180'
 	option name '检测VPN节点'
 
 config prog_list
+	option enabled '1'
 	option program 'cron_regvpn'
 	option cycle '25'
 	option path '/usr/share/sysmonitor/sysapp.sh'
@@ -105,6 +101,7 @@ config prog_list
 	option name '注册VPN'
 
 config prog_list
+	option enabled '1'
 	option program 'cron_chkvpn'
 	option cycle '60'
 	option path '/usr/share/sysmonitor/sysapp.sh'
@@ -112,6 +109,15 @@ config prog_list
 	option name '检测VPN'
 
 config prog_list
+	option enabled '1'
+	option program 'pwdata_update'
+	option cycle '240'
+	option path '/usr/share/sysmonitor/sysapp.sh'
+	option first '120'
+	option name '更新Passwall数据'
+	
+config prog_list
+	option enabled '1'
 	option program 'smartdns_update'
 	option cycle '300'
 	option path '/usr/share/sysmonitor/sysapp.sh'
@@ -119,8 +125,50 @@ config prog_list
 	option name '更新SmartDNS数据'
 	
 config prog_list
+	option enabled '1'
 	option program 'mosdns_update'
 	option cycle '300'
 	option path '/usr/share/sysmonitor/sysapp.sh'
 	option first '180'
 	option name '更新MosDNS数据'
+
+config prog_list
+	option enabled '1'
+	option program 'vpnsets'
+	option cycle '200'
+	option path '/usr/share/sysmonitor/sysapp.sh'
+	option first '90'
+	option name '更新VPN地址集'
+	
+config data_list
+	option name 'apple-中国列表'
+	option datalist 'apple-cn'
+	option path '/etc/mosdns/rule/apple-cn.txt'
+
+config data_list
+	option name 'google-中国列表'
+	option datalist 'google-cn'
+	option path '/etc/mosdns/rule/google-cn.txt'
+
+config data_list
+	option name 'gfw列表'
+	option datalist 'gfwlist'
+	option path '/usr/share/passwall/rules/gfwlist'
+
+config data_list
+	option name 'vpn站点列表'
+	option datalist 'vpnsite'
+	option path '/etc/mosdns/rule/vpnsite.txt'
+
+config data_list
+	option name 'vpn地址列表'
+	option datalist 'vpnip'
+	option path '/etc/mosdns/rule/vpnip.txt'
+
+config data_list
+	option name 'vpn集'
+	option datalist 'vpnsets'
+	option path '/tmp/vpnsets'
+
+
+

@@ -186,11 +186,11 @@ msgstr "守护DDNS"
 msgid "Rule Settings"
 msgstr "自定义规则列表"
 
-msgid "Domain IPv4-Lists"
-msgstr "IPv4域名列表"
+msgid "DATA List"
+msgstr "数据列表"
 
-msgid "These domain names allow DNS return only ipv4 address . Please input the domain names, every line can input only one domain. For example: baidu.com."
-msgstr "加入的域名屏蔽ipv6仅返回ipv4地址，（每个域名一行，支持域名匹配规则）"
+msgid "Please input the domain names, every line can input only one domain."
+msgstr "每个域名一行，(支持域名匹配规则)"
 
 msgid "Download Firmware"
 msgstr "下载固件"
@@ -224,6 +224,9 @@ msgstr "sysapp守护检测间隔(秒)"
 
 msgid "Run sysapp delay time(s)"
 msgstr "将运行sysapp时间(秒)"
+
+msgid "Check delay_prog time(s)"
+msgstr "检查程序时间(秒)"
 
 msgid "First run cycle(s)"
 msgstr "首次运行周期(秒)"
