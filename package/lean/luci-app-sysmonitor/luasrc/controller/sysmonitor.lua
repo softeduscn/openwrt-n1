@@ -11,7 +11,8 @@ function index()
 	entry({"admin", "sys","sysmonitor"}, alias("admin", "sys","sysmonitor", "system"),_("SYSMonitor"), 10).dependent = true
 	entry({"admin", "sys", "sysmonitor", "system"}, cbi("sysmonitor/system"),_("System Settings"), 20).leaf = true
 	entry({"admin", "sys", "sysmonitor", "general"}, cbi("sysmonitor/general"),_("General Settings"), 30).leaf = true
-	entry({"admin", "sys", "sysmonitor", "node"},cbi("sysmonitor/node"),_("NODE"), 40).leaf = true
+	entry({"admin", "sys", "sysmonitor", "prog"},cbi("sysmonitor/prog"),_("PROG"), 40).leaf = true
+	entry({"admin", "sys", "sysmonitor", "node"},cbi("sysmonitor/node"),_("NODE"), 41).leaf = true
 --	entry({"admin", "sys", "sysmonitor", "ddns"}, cbi("/sysmonitor/ddns"), _("DDNS"), 50).leaf = true
 	entry({"admin", "sys", "sysmonitor", "host"},cbi("sysmonitor/host"),_("Host"), 60).leaf = true
 	entry({"admin", "sys", "sysmonitor", "wgusers"},cbi("sysmonitor/wgusers"),_("WGusers"), 75).leaf = true

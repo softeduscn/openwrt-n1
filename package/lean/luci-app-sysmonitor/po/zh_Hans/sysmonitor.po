@@ -19,6 +19,12 @@ msgstr "无法打开文件："
 msgid "Create upload file error."
 msgstr "创建上传文件失败。"
 
+msgid "Up"
+msgstr "上移"
+
+msgid "Down"
+msgstr "下移"
+
 msgid "Download"
 msgstr "下载"
 
@@ -195,6 +201,9 @@ msgstr "每个域名一行，(支持域名匹配规则)"
 msgid "Download Firmware"
 msgstr "下载固件"
 
+msgid "Download firmware url"
+msgstr "下载固件URL"
+
 msgid "Update"
 msgstr "更新"
 
@@ -233,6 +242,12 @@ msgstr "首次运行周期(秒)"
 
 msgid "Run cycle(s)"
 msgstr "运行周期(秒)"
+
+msgid "Update Mosdns-data url"
+msgstr "更新Mosdns数据URL"
+
+msgid "PROG"
+msgstr "程序"
 
 msgid "Program name"
 msgstr "程序名"

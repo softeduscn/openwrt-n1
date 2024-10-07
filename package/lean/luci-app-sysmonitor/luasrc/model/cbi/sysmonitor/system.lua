@@ -18,9 +18,6 @@ s.anonymous = true
 
 --[[
 o = s:option(Value, "vpn", translate("Select VPN"))
-if nixio.fs.access("/etc/init.d/mwan3") then
-o:value("WireGuard")
-end
 if nixio.fs.access("/etc/init.d/openclash") then
 o:value("Openclash")
 end

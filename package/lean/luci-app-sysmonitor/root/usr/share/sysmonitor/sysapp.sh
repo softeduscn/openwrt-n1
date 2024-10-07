@@ -1529,20 +1529,6 @@ mosdns_update() {
 	mosdns_dir='/etc/mosdns/rule'
 	vpnsite=$mosdns_dir'/vpnsite.txt'
 	vpnip=$mosdns_dir'/vpnip.txt'
-	tmpdir=$(mktemp -d) || exit 1
-	#url='raw.githubusercontent.com'
-	#url='cdn.jsdelivr.net'
-	url='fastly.jsdelivr.net'
-	wget -O $tmpdir/apple-cn.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/apple-cn.txt
-	[ $? == 0 ] && cp $tmpdir/apple-cn.txt $mosdns_dir
-	wget -O $tmpdir/google-cn.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/google-cn.txt
-	[ $? == 0 ] && cp $tmpdir/google-cn.txt $mosdns_dir
-	if [ $? == 0 ]; then
-		setdelay_offon mosdns_update
-	fi
-	#wget -O $tmpdir/gfw.txt https://$url/gh/Loyalsoldier/v2ray-rules-dat@release/gfw.txt
-	#[ $? == 0 ] && cp $tmpdir/gfw.txt $mosdns_dir
-	rm -rf $tmpdir
 	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $vpnsite
 	[ -f $vpnip ] && rm $vpnip
 	touch $vpnip
@@ -1555,7 +1541,20 @@ mosdns_update() {
 			sed -i "/"$ip"/d" $vpnsite
 		fi
 	done
-	[ -n "$(pgrep -f mosdns)" ] && /etc/init.d/mosdns restart
+
+	tmpdir=$(mktemp -d) || exit 1
+	url=$(uci_get_by_name $NAME $NAME mosdns_url)
+	wget -O $tmpdir/apple-cn.txt $url/apple-cn.txt
+	if [ $? == 0 ]; then
+		cp $tmpdir/apple-cn.txt $mosdns_dir
+		wget -O $tmpdir/google-cn.txt $url/google-cn.txt
+		if [ $? == 0 ]; then
+			cp $tmpdir/google-cn.txt $mosdns_dir
+			setdelay_offon mosdns_update
+			[ -n "$(pgrep -f mosdns)" ] && /etc/init.d/mosdns restart
+		fi
+	fi
+	rm -rf $tmpdir	
 	#/usr/share/mosdns/mosdns.sh geodata > /dev/null 2>&1			
 }
 
@@ -1567,7 +1566,6 @@ smartdns_update() {
 		setdelay_offon smartdns_update
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		[ "$dns" == 'SmartDNS' ] && reload smartdns
-		continue
 	fi
 	rm -rf $tmpdir
 }
@@ -1771,6 +1769,9 @@ chkprog)
 	echo $chkprog'='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.sign
 	;;
 test)
+	url=$(uci_get_by_name $NAME $NAME mosdns_url)
+echo $url
+exit
 	status=$(get_delay $1)
 	echo ${status:0:1}
 	echo ${status:1}

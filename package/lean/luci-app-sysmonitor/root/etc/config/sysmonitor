@@ -19,6 +19,7 @@ config sysmonitor 'sysmonitor'
 	option nextvpntime '6'
 	option passwall '1'
 	option datalist 'apple-cn'
+	option mosdns_url 'https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release'
 	option firmware 'https://github.com/softeduscn/openwrt-n1/releases/download/ARMv8/openwrt_s905d_n1.img.gz'
 	list dnslist '119.29.29.29'
 
@@ -105,7 +106,7 @@ config prog_list
 	option program 'cron_chkvpn'
 	option cycle '60'
 	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '100'
+	option first '90'
 	option name '检测VPN'
 
 config prog_list
