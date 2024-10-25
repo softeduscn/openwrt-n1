@@ -63,6 +63,8 @@ do
 	num=$((num+1))
 done
 echo '60='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.list
+echo "15=ntpd -n -q -p ntp.aliyun.com" >> /tmp/delay.sign
+echo "30=touch /tmp/set_static.sign" >> /tmp/delay.sign
 [ -f /tmp/firstrun ] && rm /tmp/firstrun
 }
 
@@ -162,6 +164,13 @@ while [ "1" == "1" ]; do
 			rm /tmp/delay.list
 		fi	
 	fi
+	if [ -f /tmp/set_static.sign ]; then
+		rm /tmp/set_static.sign
+		lanip=$(ip -o -4 addr list br-lan | cut -d ' ' -f7 | cut -d'/' -f1)
+		lan=$(uci_get_by_name $NAME $NAME ipaddr)
+		[ "$lan" == $lanip ] && $APP_PATH/sysapp.sh set_static
+		
+	fi
 	if [ -f /tmp/ipv4.sign ]; then
 		rm /tmp/ipv4.sign
 		ipv4=$(ip -o -4 addr list br-lan | cut -d ' ' -f7 | cut -d'/' -f1)
@@ -180,23 +189,7 @@ while [ "1" == "1" ]; do
 #	[ -f /etc/init.d/lighttpd ] && [ ! -n "$(pgrep -f lighttpd)" ] && {
 #		/etc/init.d/lighttpd start
 #		}
-	dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
-	case $dns in
-		SmartDNS)
-			#[ "$(ps |grep -v grep|grep mosdns|wc -l)" != 0 ] && $APP_PATH/sysapp.sh setdns &
-			[ -n "$(pgrep -f mosdns)" ] && $APP_PATH/sysapp.sh setdns &
-			;;
-		MosDNS)
-			#[ "$(ps |grep -v grep|grep smartdns|wc -l)" != 0 ] && $APP_PATH/sysapp.sh setdns &
-			[ -n "$(pgrep -f smartdns)" ] && $APP_PATH/sysapp.sh setdns &
-			;;
-		*)
-			#[ "$(ps |grep -v grep|grep mosdns|wc -l)" != 0 ] && $APP_PATH/sysapp.sh setdns &
-			#[ "$(ps |grep -v grep|grep smartdns|wc -l)" != 0 ] && $APP_PATH/sysapp.sh setdns &
-			[ -n "$(pgrep -f mosdns)" ] && $APP_PATH/sysapp.sh setdns &
-			[ -n "$(pgrep -f smartdns)" ] && $APP_PATH/sysapp.sh setdns &
-			;;
-	esac
+
 	chk_sign nextvpn.sign next_vpn
 	chk_sign getvpn.sign getvpn
 	chk_sign makehost.sign makehost

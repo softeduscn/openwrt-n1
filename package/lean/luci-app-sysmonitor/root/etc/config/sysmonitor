@@ -15,13 +15,13 @@ config sysmonitor 'sysmonitor'
 	option chksys '180'
 	option chktest '120'
 	option prog '15'
+	option shunt '0'
 	option nextvpn '1'
 	option nextvpntime '6'
-	option passwall '1'
 	option datalist 'apple-cn'
 	option mosdns_url 'https://fastly.jsdelivr.net/gh/Loyalsoldier/v2ray-rules-dat@release'
 	option firmware 'https://github.com/softeduscn/openwrt-n1/releases/download/ARMv8/openwrt_s905d_n1.img.gz'
-	list dnslist '119.29.29.29'
+	list dnslist '192.168.1.1'
 
 config host_list
 	option hostname 'R3P'
@@ -31,60 +31,6 @@ config host_list
 	option hostname 'MI3K'
 	option hostip '192.168.1.120'
 	
-config ddns_list
-	option hostname 'vpncn.ddnsfree.com'
-	option iptype 'ip6'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'cat /www/ip6.html'
-	option ipaddr ''
-	
-config ddns_list
-	option hostname 'vpncn.ddnsfree.com'
-	option iptype 'ip4'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'curl -s --connect-timeout 1 http://members.3322.org/dyndns/getip'
-	option ipaddr ''
-	
-config ddns_list
-	option hostname 'mastcn.ddnsfree.com'
-	option iptype 'ip6'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'curl -s --connect-timeout 1 http://r3p/ip6.html'
-	option ipaddr ''
-	
-config ddns_list
-	option hostname 'mastcn.ddnsfree.com'
-	option iptype 'ip4'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'curl -s --connect-timeout 1 http://members.3322.org/dyndns/getip'
-	option ipaddr ''
-	
-config ddns_list
-	option hostname 'maincn.ddnsfree.com'
-	option iptype 'ip6'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'curl -s --connect-timeout 1 http://mi3k/ip6.html'
-	option ipaddr ''
-	
-config ddns_list
-	option hostname 'maincn.ddnsfree.com'
-	option iptype 'ip4'
-	option url 'http://api.dynu.com/nic/update'
-	option username 'sqmshcn'
-	option password 'dynuddns'
-	option getip 'curl -s --connect-timeout 1 http://members.3322.org/dyndns/getip'
-	option ipaddr ''
-
 config prog_list
 	option enabled '1'
 	option program 'checknode'
@@ -116,21 +62,13 @@ config prog_list
 	option path '/usr/share/sysmonitor/sysapp.sh'
 	option first '120'
 	option name '更新Passwall数据'
-	
-config prog_list
-	option enabled '1'
-	option program 'smartdns_update'
-	option cycle '300'
-	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '180'
-	option name '更新SmartDNS数据'
-	
+
 config prog_list
 	option enabled '1'
 	option program 'mosdns_update'
 	option cycle '300'
 	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '180'
+	option first '90'
 	option name '更新MosDNS数据'
 
 config prog_list
@@ -138,9 +76,9 @@ config prog_list
 	option program 'vpnsets'
 	option cycle '200'
 	option path '/usr/share/sysmonitor/sysapp.sh'
-	option first '90'
+	option first '50'
 	option name '更新VPN地址集'
-	
+
 config data_list
 	option name 'apple-中国列表'
 	option datalist 'apple-cn'
@@ -157,6 +95,11 @@ config data_list
 	option path '/usr/share/passwall/rules/gfwlist'
 
 config data_list
+	option name 'Cloudflare列表'
+	option datalist 'cfip'
+	option path '/etc/mosdns/rule/cloudflare-cidr.txt'
+
+config data_list
 	option name 'vpn站点列表'
 	option datalist 'vpnsite'
 	option path '/etc/mosdns/rule/vpnsite.txt'
@@ -170,6 +113,4 @@ config data_list
 	option name 'vpn集'
 	option datalist 'vpnsets'
 	option path '/tmp/vpnsets'
-
-
 

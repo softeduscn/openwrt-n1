@@ -1,5 +1,5 @@
 log:
-  level: info
+  level: error #日志级别。可选 "debug" "info" "warn" "error"。默认 "info"
   file: "/var/log/mosdns.log"
 
 # API 入口设置
@@ -10,129 +10,113 @@ include: []
 
 plugins:
  ################ DNS #################
-   # google doh dot h3
-  - tag: overseaDNS_main
+ # 测试pipeline mosdns probe pipeline tls://1.12.12.12	支持
+ # 测试pipeline mosdns probe pipeline tls://8.8.8.8	支持
+  # local_dns  转发至本地服务器
+  - tag: smartdns
     type: forward
     args:
-      concurrent: 3
       upstreams:
-        - addr: "tcp://8.8.8.8"
-        - addr: "tcp://1.1.1.1"
-        - addr: "tcp://208.67.222.222"
+        - addr: "tcp://127.0.0.1:6053"
 
-        - addr: "tls://dns.google"
-          dial_addr: "8.8.8.8"
-          enable_pipeline: true
-        - addr: "tls://1.1.1.1"
-          dial_addr: "1.1.1.1"
-          enable_pipeline: true
-          
-        - addr: "https://dns.google/dns-query"
-          dial_addr: "8.8.8.8"
-        - addr: "https://1.1.1.1/dns-query"
-          dial_addr: "1.1.1.1"         
-
- # cloudflare doh dot h3
-  - tag: overseaDNS
+  # local_smartdns  转发至国外服务器
+  - tag: smartdns_oversea
     type: forward
     args:
-      concurrent: 3
       upstreams:
-        - addr: "tcp://8.8.4.4"
-        - addr: "tcp://1.0.0.1"
-        - addr: "tcp://208.67.220.220"
-
-        - addr: "tls://dns.google"
-          dial_addr: "8.8.4.4"
-          enable_pipeline: true
-        - addr: "tls://1.0.0.1"
-          dial_addr: "1.0.0.1"
-          enable_pipeline: true
-
-        - addr: "https://dns.google/dns-query"
-          dial_addr: "8.8.4.4"
-        - addr: "https://1.0.0.1/dns-query"
-          dial_addr: "1.0.0.1"  
-
- # local doh dot dns
-  - tag: localDNS_main
-    type: forward
-    args:
-      concurrent: 3
-      upstreams:
-        - addr: "https://doh.pub/dns-query"
-          dial_addr: "1.12.12.12"
-        - addr: "tls://dot.pub"
-          dial_addr: "1.12.12.12"
-          enable_pipeline: true
-
-#        - addr: "https://dns.alidns.com/dns-query"
-#          dial_addr: "223.5.5.5"
-        - addr: "h3://dns.alidns.com/dns-query"
-          dial_addr: "223.5.5.5"
-
-  # local dns
-  - tag: localDNS
-    type: forward
-    args:
-      concurrent: 3
-      upstreams:
-        - addr: "https://doh.pub/dns-query"
-          dial_addr: "120.53.53.53"
-        - addr: "tls://dot.pub"
-          dial_addr: "120.53.53.53"
-          enable_pipeline: true
-
-#        - addr: "https://dns.alidns.com/dns-query"
-#          dial_addr: "223.6.6.6"
-        - addr: "h3://dns.alidns.com/dns-query"
-          dial_addr: "223.6.6.6"
-#        - addr: "tcp://119.29.29.29"
-#        - addr: "tcp://114.114.114.114"
-#        - addr: "tcp://180.76.76.76"
+        - addr: "tcp://127.0.0.1:8653"
 
   # 自定义hosts
   - tag: localhosts
     type: hosts
     args:
-     entries:
-        - "R3P.lan 192.168.1.119"
-        - "MI3K.lan 192.168.1.120"
+#     entries:
+#        - "domain:R3P 192.168.1.119"
+#        - "domain:MI3K 192.168.1.120"
      files:
         - "/etc/mosdns/rule/hosts.txt"
 
-  - tag: geoip_vpnip # 私网 vpn ip
+  - tag: blocklist
+    type: domain_set
+    args:
+      files:
+        - "/etc/mosdns/rule/blocklist.txt"
+
+  - tag: local_ptr
+    type: domain_set
+    args:
+      files:
+        - "/etc/mosdns/rule/local-ptr.txt"
+
+  # google & apple whitelist域名国内可访问
+  - tag: can_cn_site
+    type: domain_set
+    args:
+      files:
+        - "/etc/mosdns/rule/apple-cn.txt"
+        - "/etc/mosdns/rule/google-cn.txt"
+        - "/etc/mosdns/rule/whitelist.txt"
+        - "/etc/mosdns/rule/vpnsite.txt"
+        - "/etc/mosdns/rule/ddnslist.txt"
+
+# Clourflare IP
+  - tag: geoip_cfip
     type: ip_set
     args:
       files:
-        - "/etc/mosdns/rule/vpnip.txt"
+        - "/etc/mosdns/rule/cloudflare-cidr.txt"
 
-  # 国内域名
+ # 国内域名
   - tag: geosite_cn
     type: domain_set
     args:
       files:
-        - "/etc/mosdns/rule/vpnsite.txt"
-        - "/etc/mosdns/rule/apple-cn.txt"
-        - "/etc/mosdns/rule/google-cn.txt"
-        - "/etc/mosdns/rule/whitelist.txt"
         - "/var/mosdns/geosite_cn.txt"
 
-  # 国内 IP
+ # 国内 IP
   - tag: geoip_cn
     type: ip_set
     args:
       files:
         - "/var/mosdns/geoip_cn.txt"
+        - "/etc/mosdns/rule/vpnip.txt"
 
   # 国外域名
   - tag: geosite_no_cn
     type: domain_set
     args:
       files:
-        - "/etc/mosdns/rule/greylist.txt"
-        - "/usr/share/passwall/rules/gfwlist"
         - "/var/mosdns/geosite_geolocation-!cn.txt" 
+
+  - tag: geosite_gfw
+    type: domain_set
+    args:
+      files:
+        - "/usr/share/passwall/rules/gfwlist"
+        - "/etc/mosdns/rule/greylist.txt"
+
+  # 重定向列表
+  - tag: redirect_list
+    type: domain_set
+    args:
+      files:
+       - "/etc/mosdns/rule/redirect.txt"
+
+# 修改 TTL
+  - tag: modify_ddns_ttl
+    type: "sequence"
+    args:
+      - exec: ttl 1-5
+
+  - tag: modify_ttl
+    type: "sequence"
+    args:
+      - exec: ttl 5-10
+
+  - tag: modify_black_ttl
+    type: "sequence"
+    args:
+      - exec: ttl 600-3600
 
   # no ecs
   - tag: no_ecs
@@ -154,96 +138,62 @@ plugins:
       mask4: 24 # ipv4 掩码。默认 24
       mask6: 48 # ipv6 掩码。默认 48
 
-  # 缓存 vpnip
-  - tag: cache_vpn
-    type: cache
-    args:
-      size: 8192
-      lazy_cache_ttl: 86400
-
   # 缓存
-  - tag: lazy_cache
-    type: cache
-    args:
-      size: 20000
-      lazy_cache_ttl: 86400
+#  - tag: lazy_cache
+#    type: cache
+#    args:
+#      size: 5120
+#      lazy_cache_ttl: 86400
 #      dump_file: "/etc/mosdns/cache.dump"
 #      dump_interval: 600
 
-  # 调整 ttl
-  - tag: ttl_1m
+  # cloudflare IP 优选，需要定期修改，最好填写 2 - 4 个
+  - tag: blackhole_cloudflare
     type: sequence
     args:
-      - exec: ttl 60
-  - tag: ttl_5m
-    type: sequence
-    args:
-      - exec: ttl 300
-  - tag: ttl_1h
-    type: sequence
-    args:
-      - exec: ttl 3600
+      - exec: black_hole 104.19.26.227 104.19.77.161 104.21.238.190
+#      - exec: query_summary cloudflare_best
+      - exec: ttl 3600-0
+      - exec: accept
 
-  # 转发至本地服务器
-  - tag: forward_local
-    type: fallback
+  - tag: change_cdn_ip
+    type: sequence
     args:
-      primary: localDNS_main # 主dns
-      secondary: localDNS # 备用dns
-      threshold: 500
-      always_standby: true # 副可执行插件始终待命
-      
-  # 转发至远程服务器
-  - tag: forward_remote
-    type: "fallback"
-    args:
-      primary: overseaDNS_main # 主dns
-      secondary: overseaDNS # 备用dns
-      threshold: 700 # 无响应切换 毫秒
-      always_standby: true # 副可执行插件始终待命
+      - matches: # cloudflare 优选ip
+          - qtype 1
+          - has_wanted_ans
+          - "resp_ip $geoip_cfip"
+        exec: jump blackhole_cloudflare
 
   # 国内解析
+  # 返回非国内 ip 则 drop_resp
   - tag: local_sequence
     type: sequence
     args:
 #      - exec: $ecs_cn
-      - exec: $forward_local
-      - matches: "!resp_ip $geoip_cn" # 响应非 cn ip
+      - exec: $smartdns
+      - exec: jump modify_ttl
+      - matches: "!resp_ip $geoip_cn" # 响应 非cn ip
         exec: drop_resp # 丢弃
+#      - exec: jump change_cdn_ip
 
   # 国外解析
+  # 返回非国外 ip 则 drop_resp
   - tag: remote_sequence
     type: sequence
     args:
 #      - exec: $no_ecs
-      - exec: prefer_ipv4
-      - exec: $forward_remote
-      - matches: "resp_ip $geoip_cn" # 响应为 cn ip
+#      - exec: $lazy_cache
+#      - matches: has_resp
+#        exec: accept
+      - exec: prefer_ipv4 #优先使用ipv4 否则ai不能用(ip6地址为中国。ip4为代理)
+      - exec: $smartdns_oversea
+      - exec: jump modify_ttl
+      - matches: "resp_ip $geoip_cn" # 响应为 cn ip    
         exec: drop_resp # 丢弃
+#      - exec: jump change_cdn_ip
 
-  # 有响应终止返回
-  - tag: has_resp_sequence
-    type: sequence
-    args:
-      - matches: has_resp
-        exec: accept
-
-  # fallback 用本地服务器 sequence
-  # 返回非国内 ip 则 drop_resp
-  - tag: query_is_local_ip
-    type: sequence
-    args:
-      - exec: $local_sequence
-      - matches: "!resp_ip $geoip_cn"
-        exec: drop_resp
-
-  # fallback 用远程服务器 sequence
-  - tag: query_is_remote
-    type: sequence
-    args:
-      - exec: $remote_sequence
-
-  # 查询国内域名
+ # 查询国内域名
   - tag: query_is_local_domain
     type: sequence
     args:
@@ -257,94 +207,63 @@ plugins:
       - matches: qname $geosite_no_cn
         exec: $remote_sequence
 
-  - tag: reject_qtype65
+  # 查询国外GFW域名
+  - tag: query_is_gfw_domain
     type: sequence
     args:
-#      - exec: query_summary reject_qtype65
-      - exec: reject 3
+      - matches: qname $geosite_gfw
+        exec: $remote_sequence
 
-  - tag: reject_null_domain
+ #	google-cn & apple-cn解析
+  - tag: query_is_can_cn_domain
     type: sequence
     args:
-#      - exec: query_summary reject_null_domain
-      - exec: reject 3
-
-  - tag: fallback_seq # 其他特殊情况统一使用 forward_local 处理
-    type: sequence
-    args:
- #     - exec: query_summary fallback
-      - exec: $forward_local
-
-  - tag: other_seq # 其他特殊情况统一使用 forward_local 处理
-    type: sequence
-    args:
- #     - exec: query_summary other
-      - exec: $forward_local
+      - matches: qtype 255 # TYPE 255 类型|DNS服务器拓展支持
+        exec: $smartdns
+      - matches: qname $can_cn_site # google & apple whitelist域名国内可访问
+        exec: $smartdns
  
-  # query fallback
-  - tag: query_fallback
+  - tag: query_is_reject_domain
     type: sequence
     args:
-      # - exec: $ecs-cn
-      - exec: prefer_ipv4
-      - exec: $fallback_seq
- 
-   # query vpn
-  - tag: query_vpn
-    type: sequence
-    args:
-      - exec: $cache_vpn
-      - matches: has_resp # 命中了 lan cache
-        exec: return
-      # - exec: $no_ecs
-      - exec: $forward_local
- 
-  # 其他所有情况
-  - tag: query_other 
-    type: sequence
-    args:
-      # - exec: $no_ecs 
-      - exec: $other_seq
-
-  - tag: pre_handle
-    type: sequence
-    args:
-      - exec: $ttl_1h # ttl 1h
-      - exec: accept # 接受响应,终止流程
-
-  - tag: main_handle
-    type: sequence
-    args:
-      - exec: $ttl_5m # ttl 5min
-      - exec: accept # 接受响应,终止流程
-
-  # pre_sequence 结果处理 
-#  - tag: has_resp_pre
-#    type: sequence
-#    args:
-#      - matches: has_resp # 如果 pre 序列已有响应
-#        exec: goto pre_handle
+      - exec: jump modify_black_ttl
+      - matches: qname $blocklist
+        exec: reject
+#      - matches: 
+#        - qtype 12
+#        - "qname $local_ptr"
+#        exec: reject 3
+      - matches: qtype 65
+        exec: reject 3
+      - matches: "qname keyword::" # 无效域名
+        exec: reject 3
 
   # main_sequence 结果处理
-  - tag: has_resp_main
+  # 有响应终止返回
+  - tag: has_resp_sequence
     type: sequence
     args:
+      - exec: jump modify_ttl
       - matches: has_resp
-        exec: goto main_handle
+        exec: accept
 
-  # pre_sequence
-#  - tag: pre_sequence
- #   type: sequence
- #   args:
-#      - matches: qtype 65 # TYPE 65 类型|DNS服务器状态
-#        exec: $reject_qtype65
-#      - matches: "qname keyword::" # 无效域名
-#        exec: $reject_null_domain
-#      - matches: qtype 12 # TYPE 12 类型|反查域名 PTR 记录
-#        exec: $query_other
-#      - matches: qtype 255 # TYPE 255 类型|DNS服务器拓展支持
-#        exec: $query_other
-#      - exec: jump has_resp_pre
+  # fallback sequence
+  - tag: fallback
+    type: sequence
+    args:
+      - exec: $smartdns_oversea
+      - exec: jump has_resp_sequence
+      - exec: $smartdns
+      - exec: jump has_resp_sequence
+
+  # gfwlist解析出的ip添加至ipset，添加前先判断是否为国内ip或内网ip
+  - tag: gfw-list
+    type: sequence
+    args:
+      - exec: ttl 300-3600
+      - matches: "!resp_ip $geoip_cn"
+        exec: ipset gfwlist,inet,24
+      - exec: accept
 
 # 主要的运行逻辑插件
   # sequence 插件中调用的插件 tag 必须在 sequence 前定义，
@@ -352,40 +271,31 @@ plugins:
   - tag: main_sequence
     type: sequence
     args:
-      - matches: qtype 65 # TYPE 65 类型|DNS服务器状态
-        exec: $reject_qtype65
-      - matches: "qname keyword::" # 无效域名
-        exec: $reject_null_domain
-      - matches: qtype 12 # TYPE 12 类型|反查域名 PTR 记录
-        exec: $query_other
-      - matches: qtype 255 # TYPE 255 类型|DNS服务器拓展支持
-        exec: $query_other
 
-      - matches: ptr_ip $geoip_vpnip # vpn ip
-        exec: $query_vpn
-      - exec: jump has_resp_main
-      
-      - exec: $lazy_cache
-      - exec: jump has_resp_main
-      - exec: $localhosts 
-      - exec: jump has_resp_main
-      - exec: $query_is_local_domain #国内解析
-      - exec: jump has_resp_main
-      - exec: $query_is_no_local_domain #国内解析
-      - exec: jump has_resp_main
-      # 其他
-#      - exec: $no_ecs
-      - exec: $query_fallback
-#      - exec: jump has_resp_main
+      - exec: $localhosts
+      - exec: jump has_resp_sequence
 
-#  - tag: sequence
-#    type: sequence
-#    args:
-#      - exec: metrics_collector metrics
-#      - exec: $pre_sequence # 预处理
-#      - exec: $main_sequence # 主执行序列
-      
-  # 启动 udp 服务器。
+      - exec: $query_is_reject_domain
+      - exec: jump has_resp_sequence
+
+      - exec: $query_is_can_cn_domain # google & apple whitelist域名国内可访问
+      - exec: jump has_resp_sequence
+
+      - exec: $query_is_gfw_domain #  GFW域名
+      - exec: jump has_resp_sequence
+
+      - exec: $query_is_no_local_domain  #国外域名
+      - exec: jump has_resp_sequence
+
+      - exec: $query_is_local_domain  #国内域名处理 放在国外前，ai将不能工作(出现所在国不支持)
+      - exec: jump has_resp_sequence
+
+      - exec: jump fallback
+
+#     - matches: has_resp
+ #       exec: goto gfw-list
+
+ # 启动 udp 服务器。
   - tag: udp_server
     type: udp_server
     args:

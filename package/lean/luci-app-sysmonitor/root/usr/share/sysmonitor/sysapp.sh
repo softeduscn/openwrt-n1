@@ -55,6 +55,8 @@ set_static() {
 	status=$(ping_url 192.168.1.1)
 	if [ "$status" != 0 ]; then
 		proto static
+	else
+		echo "30=touch /tmp/set_static.sign" >> /tmp/delay.sign
 	fi
 }
 
@@ -73,22 +75,29 @@ firstrun(){
 	fi
 	[ -f /usr/share/passwall/test.sh ] && cp /usr/share/passwall/test.sh $APP_PATH
 	cat /etc/config/passwall|grep "config nodes"|cut -d"'" -f2 > /tmp/goodnode
-	touch /tmp/nodeinfo
+	file='/tmp/nodeinfo'
 	nodes=$(cat /etc/config/passwall|grep "config nodes"|cut -d"'" -f2)
-	echo '' >/tmp/nodeinfo
+	echo '' > $file
 	for i in $nodes
 	do
-		vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
-		echo '204:0.0 '$i' '$vpnname>> /tmp/nodeinfo
+		protocol=$(uci_get_by_name passwall $i protocol '')
+		if [ "$protocol" == '_shunt' ]; then
+			proxy=$(uci_get_by_name passwall $i Proxy '')
+			vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
+			vpnname=$vpnname' proxy='$(uci get passwall.$proxy.type)'='$(uci get passwall.$proxy.remarks)
+			echo '204:0.000000  '$i ' '$vpnname>> $file
+		else
+			vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
+			echo '204:0.000001 '$i' '$vpnname>> $file
+		fi
+
 	done
-	sed -i '/^$/d' /tmp/nodeinfo
+	sed -i '/^$/d' $file
 	sysdir='/etc/sysmonitor'
 	mv $sysdir/fs.lua /usr/lib/lua/luci
 	destdir=''
 	mvdir $sysdir $destdir
 	setdns
-	echo "45=$APP_PATH/sysapp.sh set_static" >> /tmp/delay.sign
-	echo "15=ntpd -n -q -p ntp.aliyun.com" >> /tmp/delay.sign
 	echo 0 > /tmp/vpn_status
 	getip
 	uci del network.utun
@@ -366,129 +375,23 @@ start_smartdns() {
 
 setdns() {
 	dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
-	pwtype=$(uci_get_by_name $NAME $NAME passwall 1)
-	if [ "$pwtype" == 1 ]; then
-	case $dns in
-		MosDNS)
-			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-			uci set mosdns.config.redirect=1
-			uci set mosdns.config.enabled=1
-			uci commit mosdns
-			uci set dhcp.@dnsmasq[0].port=0
-			uci commit dhcp
-			/etc/init.d/odhcpd reload
-			/etc/init.d/dnsmasq reload
-			reload "mosdns"
-			;;
-		SmartDNS)
-			mosdns_stop
-			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
-			port='8653'
-			[ "$(uci get passwall.@global[0].dns_shunt)" == "smartdns" ] && port='5335'
-			start_smartdns $port
-			;;
-		*)
-			mosdns_stop
-			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-			uci set dhcp.@dnsmasq[0].port=''
-			uci commit dhcp
-			/etc/init.d/dnsmasq reload
-			;;
-	esac	
+	if [ "$dns" == 'NULL' ]; then
+		close_dns
 	else
-	case $dns in
-	MosDNS)
-		#[ "$(ps |grep smartdns|grep -v grep|wc -l)" != 0 ] && /etc/init.d/smartdns stop 2>/dev/null
-		[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-		vpn=$(uci_get_by_name $NAME $NAME vpn 'NULL')
-		case $vpn in
-		Openclash)
-			uci set mosdns.config.redirect=0
-			uci set mosdns.config.enabled=1
-			uci commit mosdns
-			reload "mosdns"
-			;;
-		Passwall2)
-			uci set mosdns.config.redirect=1
-			uci set mosdns.config.enabled=1
-			uci commit mosdns
-			reload "mosdns"
-			;;
-		*)
-			uci set mosdns.config.redirect=1
-			uci set mosdns.config.enabled=1
-			uci commit mosdns
-			reload "mosdns"
-			;;
-		esac
-		;;
-	SmartDNS)
-		mosdns_stop
-		vpn=$(uci_get_by_name $NAME $NAME vpn 'NULL')
-		case $vpn in
-		Shadowsocksr)
-			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
-			port='8653'
-			[ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ] && port='5335'
-			start_smartdns $port
-			;;
-		Passwall2)
-#			uci set sysmonitor.sysmonitor.dns="NULL"
-#			uci commit sysmonitor
-#			[ "$(ps |grep smartdns|grep -v grep|wc -l)" != 0 ] && /etc/init.d/smartdns stop 2>/dev/null
-#			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-			start_smartdns
-			;;
-		Passwall)
-			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
-			port='8653'
-			[ "$(uci get passwall.@global[0].dns_shunt)" == "smartdns" ] && port='5335'
-			start_smartdns $port
-			;;
-		Openclash)
-			uci set smartdns.@smartdns[0].auto_set_dnsmasq='0'
-			start_smartdns '5335'
-			;;
-		*)
-			start_smartdns '5335'
-			;;
-		esac
-		;;
-	*)
-		mosdns_stop
-		vpn=$(uci_get_by_name $NAME $NAME vpn 'NULL')
-		case $vpn in
-		Shadowsocksr)
-			if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
-				uci set sysmonitor.sysmonitor.dns="SmartDNS"
-				#uci set sysmonitor.sysmonitor.port='53'
-				uci commit sysmonitor
-				uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
-				start_smartdns '5335'
-			else
-				#[ "$(ps |grep smartdns|grep -v grep|wc -l)" != 0 ] && /etc/init.d/smartdns stop 2>/dev/null
-				[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-			fi
-			;;
-		Passwall)
-			uci set sysmonitor.sysmonitor.dns="SmartDNS"
-			uci set sysmonitor.sysmonitor.port='53'
-			uci commit sysmonitor
-			uci set smartdns.@smartdns[0].auto_set_dnsmasq='1'
-			port='8653'
-			[ "$(uci get passwall.@global[0].dns_shunt)" == "smartdns" ] && port='5335'
-			start_smartdns $port
-			;;
-		*)
-			#[ "$(ps |grep smartdns|grep -v grep|wc -l)" != 0 ] && /etc/init.d/smartdns stop 2>/dev/null
-			[ -n "$(pgrep -f smartdns)" ] && /etc/init.d/smartdns stop 2>/dev/null
-			;;
-		esac
-		uci set dhcp.@dnsmasq[0].port=''
+		uci set dhcp.@dnsmasq[0].port=0
 		uci commit dhcp
+		/etc/init.d/odhcpd reload
 		/etc/init.d/dnsmasq reload
-		;;
-	esac
+		uci set smartdns.@smartdns[0].enabled='1'
+		uci set smartdns.@smartdns[0].auto_set_dnsmasq='0'
+		uci set smartdns.@smartdns[0].port='6053'
+		uci set smartdns.@smartdns[0].seconddns_port='8653'
+		uci commit smartdns
+		reload "smartdns"
+		uci set mosdns.config.redirect=
+		uci set mosdns.config.enabled=1
+		uci commit mosdns
+		reload "mosdns"
 	fi
 }
 
@@ -595,10 +498,10 @@ selvpn() {
 }
 
 shadowsocksr() {
-	if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
-		uci set sysmonitor.sysmonitor.dns="SmartDNS"
-		#uci set sysmonitor.sysmonitor.port='53'
-	fi
+	#if [ "$(uci get shadowsocksr.@global[0].pdnsd_enable)" == 0 ]; then
+	#	uci set sysmonitor.sysmonitor.dns="SmartDNS"
+	#	#uci set sysmonitor.sysmonitor.port='53'
+	#fi
 	uci set sysmonitor.sysmonitor.vpn="Shadowsocksr"
 	uci commit sysmonitor
 	selvpn
@@ -858,7 +761,15 @@ case $vpn in
 				done	
 				;;
 			esac
-			uci set passwall.@global[0].tcp_node=$next_node
+			mynode=$(uci_get_by_name passwall @global[0] tcp_node)
+			protocol=$(uci_get_by_name passwall $mynode protocol '')
+			[ "$(uci_get_by_name $NAME $NAME shunt NULL)" == 0 ] && protocol=''
+			if [ "$protocol" == '_shunt' ]; then
+				uci_set_by_name passwall $mynode Proxy $next_node
+			else
+				uci_set_by_name passwall @global[0] tcp_node $next_node
+				#uci set passwall.@global[0].tcp_node=$next_node
+			fi
 			uci commit passwall
 			echo "" > /tmp/log/passwall.log
 			vpn=$(uci_get_by_name $NAME $NAME vpn NULL)
@@ -951,10 +862,18 @@ checknode() {
 			echo '' >/tmp/testnode
 			for i in $nodes
 			do
+				protocol=$(uci_get_by_name passwall $i protocol '')
+				if [ "$protocol" == '_shunt' ]; then
+					proxy=$(uci_get_by_name passwall $i Proxy '')
+					vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
+					vpnname=$vpnname' proxy='$(uci get passwall.$proxy.type)'='$(uci get passwall.$proxy.remarks)
+					echo '204:0.000000  '$i ' '$vpnname>> /tmp/testnode
+				else
 				status=$($APP_PATH/test.sh url_test_node $i)
 				if [ "${status:0:1}" -ne 0 ]; then
 					vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
 					echo $status'  '$i ' '$vpnname>> /tmp/testnode
+				fi
 				fi
 			done
 			sort /tmp/testnode|cut -d' ' -f3|sed '/^$/d' > /tmp/goodnode
@@ -983,6 +902,7 @@ proto() {
 			;;
 		static)
 			uci set network.lan.proto='static'
+			uci del network.lan.dns
 			uci set network.lan.ipaddr=$(uci get sysmonitor.sysmonitor.ipaddr)
 			uci set network.lan.netmask=$(uci get sysmonitor.sysmonitor.netmask)
 			uci set network.lan.gateway=$(uci get sysmonitor.sysmonitor.gateway)
@@ -1160,7 +1080,7 @@ sysbutton() {
 		do
 			program=$(uci get sysmonitor.@prog_list[$num].program)
 			name=$(uci get sysmonitor.@prog_list[$num].name)
-			button=$button' <button class=button1><a href="sysmenu?sys='$program'&sys1=&redir=general">'$name'</a></button>'
+			button=$button' <button class=button1><a href="sysmenu?sys='$program'&sys1=&redir=prog">'$name'</a></button>'
 			num=$((num+1))
 		done
 		;;
@@ -1197,12 +1117,12 @@ sysbutton() {
 		nodenums=$(cat /tmp/nodeinfo|wc -l)
 		nodenum=$(sed -n /$vpn/= /tmp/nodeinfo)
 		name=$(getdelay checknode name)
-		button=$button'<button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=checknode&sys1=&redir=general">'$name'('$nodenum'-'$nodenums')</a></button>'
+		button=$button'<button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=checknode&sys1=&redir=prog">'$name'('$nodenum'-'$nodenums')</a></button>'
 		vpns=$(cat /tmp/vpns)
 		type=$(echo ${vpns:1}|cut -d'-' -f2|cut -d' ' -f1|tr A-Z a-z)
 		button=$button' <button class="button1" title="Goto VPN setting"><a href="/cgi-bin/luci/admin/services/'$type'" target="_blank">'$type'-></a></button><BR><BR>'
 		redir='node'
-		num=1
+		num=101
 		while read i
 		do
 			node=$(echo $i|cut -d' ' -f2)
@@ -1217,8 +1137,8 @@ sysbutton() {
 			else
 				color='grey'
 			fi
-			tmp='--'$num
-			[ "$num" -gt 9 ] && tmp='-'$num
+			tmp="$num"
+			tmp='-'${tmp:1}
 			button=$button'<button class="button1" title="Select this node for VPN service"><a href="sysmenu?sys=vpn_node&sys1='$node'&redir='$redir'">Sel'$tmp'</a></button> <B><font color='$color'>'$i'</font></B>'$link'<BR>'
 			num=$((num+1))
 		done < /tmp/nodeinfo
@@ -1286,7 +1206,8 @@ sysbutton() {
 		#button=$button' <button class="button1" title="Update VPN nodes"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=checknode&sys1=&redir='$redir'">UpdateNODE</a></button>'
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ "$dns" != "NULL" ]; then
-			button=$button' <button class=button4 title="Close DNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=closedns&sys1=&redir=system">CloseDNS</a></button>'
+			button=$button' <button class=button4 title="Close DNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=closedns&sys1=&redir=system">关闭dns</a></button>'
+			button=$button' <button class=button4 title="Restart DNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=restartdns&sys1=&redir=system">重启-dns</a></button>'
 		fi
 		;;
 	button)
@@ -1298,9 +1219,9 @@ sysbutton() {
 		dns=$(uci_get_by_name $NAME $NAME dns 'NULL')
 		if [ -f /etc/init.d/smartdns ]; then
 			dnsname='SmartDNS'
-			status=$(get_delay smartdns_update)
-			[ "${status:0:1}" == 1 ] && dnsname=$dnsname'***'
-			if [ "$dns" == 'SmartDNS' ]; then
+#			status=$(get_delay smartdns_update)
+#			[ "${status:0:1}" == 1 ] && dnsname=$dnsname'***'
+			#if [ "$dns" == 'SmartDNS' ]; then
 				if [ ! -n "$(pgrep -f smartdns)" ]; then
 					button=' <button class=button2 title="SmartDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
 					group2=$group2$button
@@ -1308,16 +1229,16 @@ sysbutton() {
 					button=' <button class=button1 title="Goto smartdns setting"><a href="/cgi-bin/luci/admin/services/smartdns" target="blank">'$dnsname'</a></button>'
 					group1=$group1$button
 				fi
-			else
-				button=' <button class=button3 title="Start smartdns"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
-				group3=$group3$button
-			fi
+			#else
+				#button=' <button class=button3 title="Start smartdns"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_smartdns&sys1=&redir=system">'$dnsname'</a></button>'
+				#group3=$group3$button
+			#fi
 		fi
 		if [ -f /etc/init.d/mosdns ]; then
 			dnsname='MosDNS'
 			status=$(get_delay mosdns_update)
 			[ "${status:0:1}" == 1 ] && dnsname=$dnsname'***'
-			if [ "$dns" == 'MosDNS' ]; then
+			#if [ "$dns" == 'MosDNS' ]; then
 				if [ ! -n "$(pgrep -f mosdns)" ]; then
 					button=' <button class=button2 title="MosDNS is not ready...,restart"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
 					group2=$group2$button
@@ -1325,10 +1246,10 @@ sysbutton() {
 					button=' <button class=button1 title="Goto MosDNS setting"><a href="/cgi-bin/luci/admin/services/mosdns" target="blank">'$dnsname'</a></button>'
 					group1=$group1$button
 				fi
-			else
-				button=' <button class=button3 title="Start MosDNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
-				group3=$group3$button
-			fi
+			#else
+				#button=' <button class=button3 title="Start MosDNS"><a href="/cgi-bin/luci/admin/sys/sysmonitor/sysmenu?sys=service_mosdns&sys1=&redir=system">'$dnsname'</a></button>'
+				#group3=$group3$button
+			#fi
 		fi
 		if [ -f /etc/init.d/shadowsocksr ]; then
 			if [ "$vpn" != 'Shadowsocksr' ]; then
@@ -1391,6 +1312,15 @@ sysmenu() {
 		fi
 		uci commit sysmonitor
 		;;
+	shunt)
+		shunt=$(uci_get_by_name $NAME $NAME shunt)
+		if [ "$shunt" == 1 ]; then
+			uci_set_by_name $NAME $NAME shunt 0
+		else
+			uci_set_by_name $NAME $NAME shunt 1
+		fi
+		uci commit sysmonitor
+		;;
 	URLchkVPN)
 		chkvpn=$(uci_get_by_name $NAME $NAME chkvpn)
 		if [ "$chkvpn" == 1 ]; then
@@ -1403,7 +1333,15 @@ sysmenu() {
 	vpn_node)
 		vpn=$(uci_get_by_name $NAME $NAME vpn NULL)
 		status='0-'$vpn
-		uci set passwall.@global[0].tcp_node=$2
+		mynode=$(uci_get_by_name passwall @global[0] tcp_node)
+		protocol=$(uci_get_by_name passwall $mynode protocol '')
+		[ "$(uci_get_by_name $NAME $NAME shunt NULL)" == 0 ] && protocol=''
+		if [ "$protocol" == '_shunt' ]; then
+			uci_set_by_name passwall $mynode Proxy $2
+		else
+			uci_set_by_name passwall @global[0] tcp_node $2
+			#uci set passwall.@global[0].tcp_node=$2
+		fi		
 		uci commit passwall
 		node=$2
 		remark=$(uci get passwall.$node.remarks)
@@ -1426,6 +1364,11 @@ sysmenu() {
 		uci set sysmonitor.sysmonitor.dns='NULL'
 		uci commit sysmonitor
 		close_dns
+		;;
+	restartdns)
+		setdns
+		#dns=$(uci_get_by_name $NAME $NAME dns 'NULL'|tr A-Z a-z)
+		#reload $dns
 		;;
 	service_smartdns)
 		uci set sysmonitor.sysmonitor.dns='SmartDNS'
@@ -1527,21 +1470,6 @@ get_ip() {
 
 mosdns_update() {
 	mosdns_dir='/etc/mosdns/rule'
-	vpnsite=$mosdns_dir'/vpnsite.txt'
-	vpnip=$mosdns_dir'/vpnip.txt'
-	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $vpnsite
-	[ -f $vpnip ] && rm $vpnip
-	touch $vpnip
-	addrlist=$(cat $vpnsite)	
-	for i in $addrlist
-	do
-		ip=$(check_ip $i)
-		if [ -n "$ip" ]; then
-			echo $ip >> $vpnip
-			sed -i "/"$ip"/d" $vpnsite
-		fi
-	done
-
 	tmpdir=$(mktemp -d) || exit 1
 	url=$(uci_get_by_name $NAME $NAME mosdns_url)
 	wget -O $tmpdir/apple-cn.txt $url/apple-cn.txt
@@ -1583,6 +1511,20 @@ pwdata_update() {
 }
 
 vpnsets() {
+	mosdns_dir='/etc/mosdns/rule'
+	vpnsite=$mosdns_dir'/vpnsite.txt'
+	vpnip=$mosdns_dir'/vpnip.txt'
+	cat /etc/config/passwall|grep address|cut -d' ' -f3|sed "s/\'//g" > $vpnsite
+	[ -f $vpnip ] && rm $vpnip
+	addrlist=$(cat $vpnsite)	
+	for i in $addrlist
+	do
+		ip=$(check_ip $i)
+		if [ -n "$ip" ]; then
+			echo $ip >> $vpnip
+			sed -i "/"$ip"/d" $vpnsite
+		fi
+	done
 	status=$(ping_url 192.168.1.1)
 	if [ "$status" != 0 ]; then
 		vpnsets='/tmp/vpnsets'
@@ -1757,7 +1699,7 @@ mosdns_update)
 	;;
 update_dns_data)
 	setdelay_offon mosdns_update 1
-	setdelay_offon smartdns_update 1
+#	setdelay_offon smartdns_update 1
 	setdelay_offon pwdata_update 1
 	;;
 update_vpn_data)

@@ -11,9 +11,9 @@
 mkdir opt
 git clone https://github.com/unifreq/openwrt_packit opt/openwrt_packit
 kout='opt/openwrt_packit'
-kversion='6.6.53'
-krelease='92+'
-kauthor='flippy'
+kversion='6.6.58'
+krelease=''
+kauthor='ophub'
 if [ "$kauthor" == 'flippy' ];then
 	#kpath='https://github.com/breakings/OpenWrt/releases/download/kernel_stable/'
 	kpath='https://github.com/ophub/kernel/releases/download/kernel_flippy/'

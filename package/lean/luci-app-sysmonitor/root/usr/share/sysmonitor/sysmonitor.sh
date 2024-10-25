@@ -44,20 +44,6 @@ sys_exit() {
 	exit 0
 }
 
-set_lan() {
-#	uci set network.lan.ipaddr=$(uci_get_by_name $NAME $NAME ipaddr '192.168.1.110')
-	proto=$(uci get network.lan.proto)
-	if [ "$proto" == 'static' ]; then
-		uci del network.lan.dns
-		for i in $(uci_get_by_name $NAME $NAME dnslist '192.168.1.1')
-		do
-			uci add_list network.lan.dns=$i
-		done
-		uci commit network
-		ifup lan
-	fi
-}
-
 mask() {
     num=$((4294967296 - 2 ** (32 - $1)))
     for i in $(seq 3 -1 0); do
@@ -138,7 +124,7 @@ while [ "1" == "1" ]; do
 				mask=$(mask $(echo $lanip|cut -d'/' -f2))
 				lanip=$(echo $lanip|cut -d'/' -f1)
 				lan=$(uci_get_by_name $NAME $NAME ipaddr)
-				if [ "$lan" != lanip ]; then
+				if [ "$lan" != $lanip ]; then
 					gateway=$(check_ip $(ip route|grep default|cut -d' ' -f3))
 					if [ -n "$gateway" ]; then
 						uci set sysmonitor.sysmonitor.ipaddr=$lanip
@@ -150,10 +136,6 @@ while [ "1" == "1" ]; do
 			fi
 			;;
 	esac
-	if [ -f /tmp/network.sign ]; then
-		rm /tmp/network.sign
-		set_lan
-	fi
 	num=0
 	check_time=$(uci_get_by_name $NAME $NAME systime 10)
 	[ "$check_time" -le 3 ] && check_time=3

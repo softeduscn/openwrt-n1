@@ -101,13 +101,19 @@ msgid "Enable URL check VPN"
 msgstr "启用URL检测VPN"
 
 msgid "Disable URL check VPN"
-msgstr "禁止URL检测VPN"
+msgstr "禁用URL检测VPN"
 
 msgid "Enable switch VPN"
 msgstr "启用VPN切换"
 
 msgid "Disable switch VPN"
-msgstr "禁止VPN切换"
+msgstr "禁用VPN切换"
+
+msgid "Enable shunt"
+msgstr "启用分流总节点"
+
+msgid "Disable shunt"
+msgstr "禁用分流总节点"
 
 msgid "Switch VPN time(m)"
 msgstr "切换VPN间隔(分)"

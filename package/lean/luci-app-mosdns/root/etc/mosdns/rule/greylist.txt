@@ -1,2 +1,5 @@
 # MosDNS Rules
-
+domain:browserleaks.org
+domain:dnsleaktest.com
+domain:ipleak.net
+domain:browserscan.net

@@ -1,2 +1,2 @@
 # MosDNS Rules
-
+domain:ddnsfree.com

@@ -1,9 +1,15 @@
 #!/bin/sh
 
+HOSTNAME='VPN'
 uci set fstab.@global[0].anon_mount='1'
 uci commit fstab
 
-uci set system.@system[0].hostname='VPN'
+sed -i '/VPN/d' /etc/hosts
+sed -i '/vpn/d' /etc/hosts
+echo '127.0.0.1 '$HOSTNAME >> /etc/hosts
+echo '127.0.0.1 '$HOSTNAME|tr A-Z a-z  >> /etc/hosts
+
+uci set system.@system[0].hostname=$HOSTNAME
 uci set system.@system[0].timezone=CST-8
 uci set system.@system[0].zonename=Asia/Shanghai
 uci commit system
