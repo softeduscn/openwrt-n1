@@ -85,7 +85,7 @@ firstrun(){
 			proxy=$(uci_get_by_name passwall $i Proxy '')
 			vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
 			vpnname=$vpnname' proxy='$(uci get passwall.$proxy.type)'='$(uci get passwall.$proxy.remarks)
-			echo '204:0.000000  '$i ' '$vpnname>> $file
+			echo '204:0.000000 *'$i' '$vpnname>> $file
 		else
 			vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
 			echo '204:0.000001 '$i' '$vpnname>> $file
@@ -360,17 +360,32 @@ smartdns_cache() {
 	reload "smartdns"
 }
 
-start_smartdns() {
-	uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME port '53')
-	uci set smartdns.@smartdns[0].enabled='1'
-	if [ -n "$1" ]; then
-		uci set smartdns.@smartdns[0].seconddns_enabled='1'
-		uci set smartdns.@smartdns[0].seconddns_port=$1
-	else
-		uci set smartdns.@smartdns[0].seconddns_enabled='0'
-	fi
-	uci commit smartdns
-	reload "smartdns"
+setdns_port() {
+	local_port=$(uci_get_by_name $NAME $NAME local_port '6053')
+	oversea_port=$(uci_get_by_name $NAME $NAME oversea_port '8653')
+	oversea=$oversea_port' '$(uci_get_by_name $NAME $NAME oversea '')
+	mosdns_port=$(uci_get_by_name $NAME $NAME mosdns_port '53')
+	smartdns_conf='/etc/smartdns/custom.conf'
+	sed -i "/bind/d" $smartdns_conf
+	sed -i "/local&oversea/abind-tcp [::]:$oversea" $smartdns_conf
+	sed -i "/local&oversea/abind [::]:$oversea" $smartdns_conf
+	sed -i "/local&oversea/abind-tcp [::]:$local_port" $smartdns_conf
+	sed -i "/local&oversea/abind [::]:$local_port" $smartdns_conf
+	mosdns_conf='/etc/mosdns/config_custom.yaml'
+	m=$(sed -n '/smartdns_local_port/=' $mosdns_conf)
+	m=$((m+1))
+	sed -i $m's/127.0.0.1:.*/127.0.0.1:'$local_port'"/' $mosdns_conf
+	m=$(sed -n '/smartdns_oversea_port/=' $mosdns_conf)
+	m=$((m+1))
+	sed -i $m's/127.0.0.1:.*/127.0.0.1:'$oversea_port'"/' $mosdns_conf
+	m=$(sed -n '/mosdns_udp_port/=' $mosdns_conf)
+	m=$((m+1))
+	sed -i $m's/":.*/":'$mosdns_port'"/' $mosdns_conf
+	sed -i $m's/127.0.0.1:.*/127.0.0.1:'$oversea_port'"/' $mosdns_conf
+	m=$(sed -n '/mosdns_tcp_port/=' $mosdns_conf)
+	m=$((m+1))
+	sed -i $m's/":.*/":'$mosdns_port'"/' $mosdns_conf	
+	setdns
 }
 
 setdns() {
@@ -384,8 +399,8 @@ setdns() {
 		/etc/init.d/dnsmasq reload
 		uci set smartdns.@smartdns[0].enabled='1'
 		uci set smartdns.@smartdns[0].auto_set_dnsmasq='0'
-		uci set smartdns.@smartdns[0].port='6053'
-		uci set smartdns.@smartdns[0].seconddns_port='8653'
+		uci set smartdns.@smartdns[0].port=$(uci_get_by_name $NAME $NAME local_port '6053')
+		uci set smartdns.@smartdns[0].seconddns_port=$(uci_get_by_name $NAME $NAME oversea_port '8653')
 		uci commit smartdns
 		reload "smartdns"
 		uci set mosdns.config.redirect=
@@ -686,7 +701,7 @@ do
 	enabled=$(uci_get_by_name $NAME @prog_list[$num] enabled 0)
 	status=$(cat /tmp/delay.list|grep $program|wc -l)
 	if [ "$status" == 0 ]; then
-	cycle=$(uci_get_by_name $NAME @prog_list[$num] cycle 200)
+		cycle=$(uci_get_by_name $NAME @prog_list[$num] cycle 200)
 		enabled=$(uci_get_by_name $NAME @prog_list[$num] enabled 0)
 		[ "$enabled" == 1 ] && echo $cycle'='$path' '$program >> /tmp/delay.sign
 	else	
@@ -867,12 +882,12 @@ checknode() {
 					proxy=$(uci_get_by_name passwall $i Proxy '')
 					vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
 					vpnname=$vpnname' proxy='$(uci get passwall.$proxy.type)'='$(uci get passwall.$proxy.remarks)
-					echo '204:0.000000  '$i ' '$vpnname>> /tmp/testnode
+					echo '204:0.000000 *'$i' '$vpnname>> /tmp/testnode
 				else
 				status=$($APP_PATH/test.sh url_test_node $i)
 				if [ "${status:0:1}" -ne 0 ]; then
 					vpnname=$(uci get passwall.$i.type)'='$(uci get passwall.$i.remarks)
-					echo $status'  '$i ' '$vpnname>> /tmp/testnode
+					echo $status' '$i' '$vpnname>> /tmp/testnode
 				fi
 				fi
 			done
@@ -1534,13 +1549,19 @@ vpnsets() {
 		for i in $nodes 
 		do
 			num=$((num+1))
-			addr=$(uci get passwall.$i.address)
+			protocol=$(uci_get_by_name passwall $i protocol '')
+			if [ "$protocol" == '_shunt' ]; then
+				proxy=$(uci_get_by_name passwall $i Proxy '')
+				addr=$(uci get passwall.$proxy.address)
+				i='*'$i
+			else
+				addr=$(uci get passwall.$i.address)
+			fi
 			ip=$(check_ip $addr)
 			[ ! -n "$ip" ] && ip=$(get_ip $addr)
 			len=$(echo $addr|awk '{print length}')
-			addr=$addr'\t'
-			[ "$len" -le 15 ] && addr=$addr'\t'
-			echo -e $num'\t'$i' '$addr$ip >> $vpnsets
+			[ "$len" -lt 15 ] && addr=$addr'\t'
+			echo -e $num'\t'$i' '$addr'\t'$ip >> $vpnsets
 		done
 		setdelay_offon vpnsets
 	fi
@@ -1619,6 +1640,9 @@ passwall2)
 	;;
 shadowsocksr)
 	shadowsocksr
+	;;
+setdns_port)
+	setdns_port
 	;;
 setdns)
 	setdns
@@ -1711,9 +1735,8 @@ chkprog)
 	echo $chkprog'='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.sign
 	;;
 test)
-	url=$(uci_get_by_name $NAME $NAME mosdns_url)
-echo $url
-exit
+
+	exit
 	status=$(get_delay $1)
 	echo ${status:0:1}
 	echo ${status:1}

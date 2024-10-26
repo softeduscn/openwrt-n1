@@ -180,6 +180,18 @@ msgstr "选择DNS"
 msgid "SmartDNS PORT"
 msgstr "SmartDNS端口"
 
+msgid "SmartDNS local port"
+msgstr "SmartDNS本地端口"
+
+msgid "SmartDNS oversea port"
+msgstr "SmartDNS国外端口"
+
+msgid "SmartDNS oversea para"
+msgstr "SmartDNS国外端口参数"
+
+msgid "MosDNS listen port"
+msgstr "MosDNS监听端口"
+
 msgid "SmartDNS-AD Enable"
 msgstr "启用SmartDNS-AD"
 

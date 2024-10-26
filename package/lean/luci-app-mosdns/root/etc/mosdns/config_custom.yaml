@@ -17,14 +17,16 @@ plugins:
     type: forward
     args:
       upstreams:
-        - addr: "tcp://127.0.0.1:6053"
+      #smartdns_local_port *** modify port sign not move
+        - addr: "127.0.0.1:6053"
 
   # local_smartdns  转发至国外服务器
   - tag: smartdns_oversea
     type: forward
     args:
       upstreams:
-        - addr: "tcp://127.0.0.1:8653"
+      #smartdns_oversea_port *** modify port sign not move
+        - addr: "127.0.0.1:8653"
 
   # 自定义hosts
   - tag: localhosts
@@ -300,6 +302,7 @@ plugins:
     type: udp_server
     args:
       entry: main_sequence
+      #mosdns_udp_port *** modify port sign not move
       listen: ":53"
 
   # 启动 tcp 服务器。
@@ -307,4 +310,5 @@ plugins:
     type: tcp_server
     args:
       entry: main_sequence
+      #mosdns_tcp_port *** modify port sign not move
       listen: ":53"
