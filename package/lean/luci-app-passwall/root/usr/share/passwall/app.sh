@@ -1934,6 +1934,7 @@ acl_app() {
 }
 
 start() {
+	touch /tmp/passwall_start
 	ulimit -n 65535
 	start_haproxy
 	start_socks
@@ -1979,7 +1980,7 @@ start() {
 	[ "$ENABLED_DEFAULT_ACL" == 1 ] && source $APP_PATH/helper_${DNS_N}.sh logic_restart
 	start_crontab
 	echolog "运行完成！\n"
-	/usr/share/sysmonitor/sysapp.sh setdns
+	echo '30=/usr/share/sysmonitor/sysapp.sh passwall_start' >> /tmp/delay.sign
 }
 
 stop() {

@@ -12,6 +12,148 @@ plugins:
  ################ DNS #################
  # 测试pipeline mosdns probe pipeline tls://1.12.12.12	支持
  # 测试pipeline mosdns probe pipeline tls://8.8.8.8	支持
+   # google doh dot h3
+  - tag: google
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::6464"
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::0064"
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::8844"
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::8888"
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "8.8.4.4"
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "8.8.8.8"
+
+        - addr: "tls://dns.google"
+          dial_addr: "8.8.4.4"
+          enable_pipeline: true # TCP/DoT 启用 RFC 7766 新的 query pipelining 连接复用模式
+        - addr: "tls://dns.google"
+          dial_addr: "2001:4860:4860::8888"
+          enable_pipeline: true
+        - addr: "tls://dns.google"
+          dial_addr: "8.8.8.8"
+          enable_pipeline: true
+        # h3
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::8844"
+          enable_http3: true
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "8.8.4.4"
+          enable_http3: true
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "2001:4860:4860::8888"
+          enable_http3: true
+        - addr: "https://dns.google/dns-query"
+          dial_addr: "8.8.8.8"
+          enable_http3: true
+
+  # cloudflare doh dot h3
+  - tag: cloudflare
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "2606:4700:4700::1001"
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "1.0.0.1"
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "2606:4700:4700::1111"
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "1.0.0.1"
+
+        - addr: "tls://1dot1dot1dot1.cloudflare-dns.com"
+          dial_addr: "2606:4700:4700::1001"
+          enable_pipeline: true # TCP/DoT 启用 RFC 7766 新的 query pipelining 连接复用模式
+        - addr: "tls://1dot1dot1dot1.cloudflare-dns.com"
+          dial_addr: "1.0.0.1"
+          enable_pipeline: true
+        - addr: "tls://1dot1dot1dot1.cloudflare-dns.com"
+          dial_addr: "2606:4700:4700::1111"
+          enable_pipeline: true
+        - addr: "tls://1dot1dot1dot1.cloudflare-dns.com"
+          dial_addr: "1.0.0.1"
+          enable_pipeline: true
+
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "2606:4700:4700::1001"
+          enable_http3: true
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "1.0.0.1"
+          enable_http3: true
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "2606:4700:4700::1111"
+          enable_http3: true
+        - addr: "https://cloudflare-dns.com/dns-query"
+          dial_addr: "1.1.1.1"
+          enable_http3: true
+
+  # ali doh dot h3
+  - tag: ali
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "2400:3200:baba::1"
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.5.5.5"
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "2400:3200::1"
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.6.6.6"
+
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "2400:3200:baba::1"
+          enable_pipeline: true
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "223.5.5.5"
+          enable_pipeline: true
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "2400:3200::1"
+          enable_pipeline: true
+        - addr: "tls://dns.alidns.com"
+          dial_addr: "223.6.6.6"
+          enable_pipeline: true
+
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "2400:3200:baba::1"
+          enable_http3: true
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.5.5.5"
+          enable_http3: true
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "2400:3200::1"
+          enable_http3: true
+        - addr: "https://dns.alidns.com/dns-query"
+          dial_addr: "223.6.6.6"
+          enable_http3: true
+
+  # dnspod doh dot
+  - tag: dnspod
+    type: forward
+    args:
+      concurrent: 3
+      upstreams:
+        - addr: "https://doh.pub/dns-query"
+          dial_addr: "1.12.12.12"
+        - addr: "https://doh.pub/dns-query"
+          dial_addr: "120.53.53.53"
+
+        - addr: "tls://dot.pub"
+          dial_addr: "1.12.12.12"
+          enable_pipeline: true
+        - addr: "tls://dot.pub"
+          dial_addr: "120.53.53.53"
+          enable_pipeline: true
+
   # local_dns  转发至本地服务器
   - tag: smartdns
     type: forward
@@ -104,6 +246,24 @@ plugins:
       files:
        - "/etc/mosdns/rule/redirect.txt"
 
+  ################ 序列 #################
+  - tag: dns_nocn
+    type: "fallback"
+    args:
+      primary: google # 主dns
+      secondary: cloudflare # 备用dns
+      threshold: 500 # 无响应切换 毫秒
+      always_standby: true # 副可执行插件始终待命
+
+  # dns-cn 序列
+  - tag: dns_cn
+    type: "fallback"
+    args:
+      primary: ali # 主dns
+      secondary: dnspod # 备用dns
+      threshold: 500
+      always_standby: true # 副可执行插件始终待命
+
 # 修改 TTL
   - tag: modify_ddns_ttl
     type: "sequence"
@@ -141,11 +301,11 @@ plugins:
       mask6: 48 # ipv6 掩码。默认 48
 
   # 缓存
-#  - tag: lazy_cache
-#    type: cache
-#    args:
-#      size: 5120
-#      lazy_cache_ttl: 86400
+  - tag: lazy_cache
+    type: cache
+    args:
+      size: 5120
+      lazy_cache_ttl: 86400
 #      dump_file: "/etc/mosdns/cache.dump"
 #      dump_interval: 600
 
@@ -253,9 +413,9 @@ plugins:
   - tag: fallback
     type: sequence
     args:
-      - exec: $smartdns_oversea
+      - exec: $dns_nocn
       - exec: jump has_resp_sequence
-      - exec: $smartdns
+      - exec: $dns_cn
       - exec: jump has_resp_sequence
 
   # gfwlist解析出的ip添加至ipset，添加前先判断是否为国内ip或内网ip
@@ -278,6 +438,9 @@ plugins:
       - exec: jump has_resp_sequence
 
       - exec: $query_is_reject_domain
+      - exec: jump has_resp_sequence
+
+      - exec: $lazy_cache
       - exec: jump has_resp_sequence
 
       - exec: $query_is_can_cn_domain # google & apple whitelist域名国内可访问

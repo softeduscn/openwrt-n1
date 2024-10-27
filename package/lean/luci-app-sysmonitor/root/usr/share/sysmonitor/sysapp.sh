@@ -289,9 +289,7 @@ curl_url() {
 getvpn() {
 	hostname=$(uci get system.@system[0].hostname)
 	vpn=$(uci_get_by_name $NAME $NAME vpn NULL)
-	if [ "$vpn" == 'NULL' ]; then
-		status='0'
-	else	
+	if [ "$vpn" != 'NULL' ]; then
 		status=$(ping_url www.google.com)
 		if [ "$status" != 0 ]; then
 			status=$(test_url "https://www.google.com/generate_204")
@@ -314,16 +312,15 @@ getvpn() {
 			fi
 		fi
 	fi
+	if [ ! -f /tmp/passwall_start ]; then
 	if [ "$status" == 0 ]; then
-		num=$(cat /tmp/vpn_status)
-		num=$((num+1))
-		echo $num > /tmp/vpn_status
-#		[ -f /tmp/nextvpn.again ] && nextvpn &
-		nextvpn &
-	else
-		echo 0 > /tmp/vpn_status
-		echo 0 > /tmp/nextvpn.count
-		[ "$(cat /tmp/nodeinfo|wc -l)" == 0 ] && checknode &
+		num=$(cat /tmp/delay.list|grep nextvpn|wc -l)
+		if [ "$num" == 0 ]; then
+			nextvpntime=$(uci_get_by_name $NAME $NAME nextvpntime 3)
+			nextvpntime=$((nextvpntime*60))
+			echo "$nextvpntime=$APP_PATH/sysapp.sh nextvpn" >> /tmp/delay.sign
+		fi
+	fi
 	fi
 	status=$status'-'$vpn
 	case $vpn in
@@ -407,22 +404,6 @@ setdns() {
 		uci set mosdns.config.enabled=1
 		uci commit mosdns
 		reload "mosdns"
-	fi
-}
-
-mosdns_stop() {
-	#if [ "$(ps |grep mosdns|grep -v grep|wc -l)" != 0 ]; then
-	if [ -n "$(pgrep -f mosdns)" ]; then
-		uci set mosdns.config.enabled=0
-		uci commit mosdns
-		/etc/init.d/mosdns stop 2>/dev/null
-	fi
-	if [ "$(uci get dhcp.@dnsmasq[0].noresolv)" == 1 ]; then
-		uci set dhcp.@dnsmasq[0].noresolv=0
-		uci set dhcp.@dnsmasq[0].server=''
-		uci set dhcp.@dnsmasq[0].port=''
-		uci commit dhcp
-		/etc/init.d/dnsmasq reload
 	fi
 }
 
@@ -719,30 +700,16 @@ if [ ! -f /tmp/forceNextVPN ]; then
 	for i in {1..2}; do
 		vpn1=$(getvpn)
 		if [ "${vpn1:0:1}" == 1 ]; then
-			echo 0 > /tmp/nextvpn.count
 			echo ${vpn1:0}
 			exit
 		fi
 	done
-	nextvpn_count=$(cat /tmp/nextvpn.count)
-	nextvpntime=$(uci_get_by_name $NAME $NAME nextvpntime 3)
-	if [ "$nextvpntime" -gt $nextvpn_count ]; then
-#		node=$(uci get passwall.@global[0].tcp_node)
-#		vpnname=$(uci get passwall.$node.type)' '$(uci get passwall.$node.remarks)
-#		echolog $vpnname" is not good.wiat a moment to check again..."
-		nextvpn_count=$((nextvpn_count+1))
-		echo $nextvpn_count > /tmp/nextvpn.count
-		exit
-	else
-		node=$(uci get passwall.@global[0].tcp_node)
-		sed -i "/$node/d" /tmp/goodnode
-		sed -i "/$node/d" /tmp/nodeinfo
-		touch /tmp/firstnode
-		echo 0 > /tmp/nextvpn_count
-	fi
+	node=$(uci get passwall.@global[0].tcp_node)
+	sed -i "/$node/d" /tmp/goodnode
+	sed -i "/$node/d" /tmp/nodeinfo
+	touch /tmp/firstnode
 else
 	rm /tmp/forceNextVPN
-	echo 0 > /tmp/nextvpn_count
 fi
 touch /tmp/next_vpn.run
 case $vpn in
@@ -751,6 +718,7 @@ case $vpn in
 		if [ "$(cat /tmp/goodnode|wc -l)" -ne 0 ]; then
 			nodes=$(cat /tmp/goodnode)
 			firstnode=$(echo $nodes|cut -d' ' -f1)
+			[ "$firstnode" == '*myshunt' ] && firstnode=$(echo $nodes|cut -d' ' -f2)
 			nodes=$nodes' '$firstnode
 			current=$(uci get passwall.@global[0].tcp_node)
 			arg=0
@@ -891,7 +859,7 @@ checknode() {
 				fi
 				fi
 			done
-			sort /tmp/testnode|cut -d' ' -f3|sed '/^$/d' > /tmp/goodnode
+			sort /tmp/testnode|cut -d' ' -f2|sed '/^$/d' > /tmp/goodnode
 			sort /tmp/testnode|sed '/^$/d' > /tmp/nodeinfo
 			;;
 	esac
@@ -1734,12 +1702,14 @@ chkprog)
 	chkprog=$(uci_get_by_name $NAME $NAME chkprog 60)
 	echo $chkprog'='$APP_PATH'/sysapps.sh chkprog' >> /tmp/delay.sign
 	;;
+passwall_start)
+	[ -f /tmp/passwall_start ] && rm /tmp/passwall_start
+	;;
 test)
-
+	nextvpntime=$(uci_get_by_name $NAME $NAME nextvpntime 3)
+	nextvpntime=$((nextvpntime*60))
+	echo "$nextvpntime=$APP_PATH/sysapp.sh nextvpn"
 	exit
-	status=$(get_delay $1)
-	echo ${status:0:1}
-	echo ${status:1}
 	;;
 *)
 	echo "No this function!"
